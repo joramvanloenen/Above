@@ -180,16 +180,35 @@
     }
   }
 
+  function treeSpecies(x,y,dominant) {
+    // Groups share a little character without turning into identical plantations.
+    if(mapRand()<.4)return dominant;
+    const r=mapRand();
+    return r<.30?0:r<.51?1:r<.73?2:r<.88?3:4;
+  }
+  function plantTree(x,y,dominant) {
+    const species=treeSpecies(x,y,dominant);
+    const base=[1.0,1.08,1.15,.81,1.13][species];
+    const size=base*rbetween(.78,1.28);
+    trees.push({
+      x,y,species,size,
+      sprite:Math.floor(mapRand()*6),
+      twilight:duskWeight(x,y)>.6,
+      flip:mapRand()<.5,sway:mapRand()*TAU,
+      trunkRadius:(species===2?5:species===3?3:4)*size
+    });
+  }
   function generateTrees() {
     // Cluster planting creates the dense, tangled woodland silhouettes in the reference.
     for(let c=0;c<145;c++){
       const x=rbetween(85,W-85),y=rbetween(115,H-100);
       const n=3+Math.floor(mapRand()*11);
+      const dominant=Math.floor(mapRand()*5);
       for(let j=0;j<n;j++){
         const xx=x+rbetween(-39,39),yy=y+rbetween(-33,33);
         if(xx<15||xx>W-15||yy<30||yy>H-15)continue;
         if(meadowWeight(xx,yy)>.53)continue;
-        trees.push({x:xx,y:yy,sprite:Math.floor(mapRand()*9),twilight:duskWeight(xx,yy)>.6,sway:mapRand()*TAU});
+        plantTree(xx,yy,dominant);
       }
     }
     // Deliberate wooded borders frame the opening meadow.
@@ -198,7 +217,7 @@
       for(let i=0;i<count;i++){
         const x=cx+rbetween(-34,34),y=cy+rbetween(-75,75);
         if(meadowWeight(x,y)>.58)continue;
-        trees.push({x,y,sprite:Math.floor(mapRand()*9),twilight:duskWeight(x,y)>.6,sway:mapRand()*TAU});
+        plantTree(x,y,Math.floor(mapRand()*5));
       }
     }
     trees.sort((a,b)=>a.y-b.y);
@@ -221,74 +240,139 @@
     }
   }
 
-  function makeCrown(variant,dusk=false){
-    const c=makeCanvas(72,88),g=c.getContext("2d"),r=seeded(1509+variant*47);
-    const dark=dusk?"#372852":PAL.deep;
-    const violet=dusk?"#50366e":PAL.violet;
-    const leaf=dusk?"#5c437d":PAL.leaf;
-    const leafHi=dusk?"#70548a":PAL.leafHi;
-    const leafBright=dusk?"#80689b":PAL.leafBright;
-    const lobes=[
-      [35,31,24,24],[21,39,15,17],[49,38,15,19],
-      [34,17,20,14],[19,25,12,13],[52,26,13,16],
-      [26,48,15,15],[43,51,16,13],
-      [33+r()*7-3,8+r()*4,14,11],
-      [12+r()*4,44,10,11],[58+r()*2,46,9,12]
-    ];
-    // Cast shadow at the foot, then trunk, then several layers of canopy.
-    pix(g,13,76,50,4,"#86a37b");pix(g,17,80,41,3,"#8ca87c");
-    pix(g,32,52,8,28,dark);
-    pix(g,35,52,3,28,"#564362");
-    pix(g,33,66,2,13,"#76576e");
-    const mask=new Uint8Array(72*88);
-    for(let y=3;y<68;y++){
-      for(let x=3;x<69;x++){
-        let inside=false;
-        const wobble=(r()-.5)*.19;
-        for(const [cx,cy,rx,ry] of lobes){
-          const dx=(x-cx)/rx,dy=(y-cy)/ry;
-          if(dx*dx+dy*dy<1+wobble){inside=true;break;}
+  // Five actual tree families, rather than one crown with recoloured noise.
+  // All sprite origins share the same ground-foot position (48,94).
+  function makeCrown(variant,dusk=false,species=0) {
+    const c=makeCanvas(96,108),g=c.getContext("2d");
+    const r=seeded(1509+variant*47+species*4711+(dusk?70001:0));
+    const palettes=dusk
+      ? [["#372850","#563b70","#674982","#816499","#9b7db0"],
+         ["#35284e","#50396d","#655080","#786291","#9680a8"],
+         ["#3d2c56","#60406d","#744e83","#89649b","#a187ae"]]
+      : [["#34294f","#514065","#367887","#488b92","#6c9da1"],
+         ["#352d4d","#4d405c","#417c7a","#52918e","#7ba69d"],
+         ["#392d50","#604260","#3f748e","#4e859c","#79a4a5"]];
+    const [dark,shadow,leaf,light,highlight]=palettes[variant%3];
+    const lobes=[];
+    let trunkY=46;
+    // Shape grammar: clustered oak, tiered conifer, broad flat canopy,
+    // low multi-crown coppice, and hanging willow.
+    if(species===0){
+      lobes.push([48,33,25,23],[25,39,17,21],[70,43,19,21],
+        [40,17,20,15],[62,20,18,15],[30,57,15,15],[61,57,20,15]);
+      trunkY=43;
+    }else if(species===1){
+      trunkY=22;
+      // A slim, asymmetrical, tapering evergreen with stepped branch skirts.
+      for(let tier=0;tier<6;tier++){
+        const y=15+tier*10,wide=8+tier*3.7;
+        lobes.push([48+(r()-.5)*4,y,wide,11],[48+(r()-.5)*5,y+5,wide*.90,8]);
+      }
+    }else if(species===2){
+      trunkY=40;
+      lobes.push([23,36,20,18],[42,21,24,19],[69,35,23,19],
+        [48,42,24,20],[14,48,13,14],[79,48,13,15],
+        [33,53,22,14],[65,54,19,13]);
+    }else if(species===3){
+      trunkY=58;
+      lobes.push([27,65,21,16],[46,49,19,19],[65,64,24,16],
+        [35,59,20,19],[56,56,19,18],[18,73,13,11],[78,74,12,10]);
+    }else{
+      trunkY=34;
+      lobes.push([48,23,22,19],[31,37,22,18],[63,37,22,18],
+        [46,43,27,21],[26,57,17,22],[70,59,16,22],[48,55,21,19]);
+    }
+    // Shift individual clumps around in BOTH axes: not merely recolouring.
+    for(const l of lobes){
+      l[0]+=(r()-.5)*(species===1?3:11);
+      l[1]+=(r()-.5)*7;
+      l[2]*=.86+r()*.27;
+      l[3]*=.86+r()*.28;
+    }
+    // Stippled flattened shadow; crooked/forked trunks remain visible beneath foliage.
+    pix(g,26,97,46,3,dusk?"#88777e":"#849c7b");
+    pix(g,32,100,32,2,dusk?"#958587":"#94a783");
+    const trunkWidth=species===3?4:species===1?5:7;
+    pix(g,48-trunkWidth/2,trunkY,trunkWidth,95-trunkY,dark);
+    pix(g,48,trunkY+9,2,86-trunkY,"#765369");
+    if(species===2||species===0){
+      for(let i=0;i<15;i++){
+        const x=46-i*.85,y=65-i*.9;
+        pix(g,x,y,3,2,dark);
+      }
+      for(let i=0;i<16;i++)pix(g,50+i*.7,62-i,3,2,shadow);
+    }else if(species===3){
+      for(let i=0;i<13;i++){
+        pix(g,47-i*.75,85-i*.95,2,2,dark);
+        pix(g,50+i*.7,85-i*1.1,2,2,shadow);
+      }
+    }else if(species===4){
+      for(let i=0;i<18;i++)pix(g,48-i*.6,67-i*1.2,2,2,dark);
+    }
+    const mask=new Uint8Array(96*108);
+    for(let y=4;y<89;y++)for(let x=2;x<94;x++){
+      let inside=false;
+      for(const [cx,cy,rx,ry] of lobes){
+        const dx=(x-cx)/rx,dy=(y-cy)/ry;
+        if(dx*dx+dy*dy<1){inside=true;break;}
+      }
+      // Not all crowns have the same ragged convex hull.
+      if(inside && r()>.024)mask[y*96+x]=1;
+    }
+    // Willow fringe hangs below its central canopy; the tip lengths vary.
+    if(species===4){
+      for(let i=0;i<26;i++){
+        const x=Math.floor(16+r()*65),y=Math.floor(38+r()*12);
+        const len=Math.floor(13+r()*25);
+        for(let j=0;j<len;j++){
+          const xx=x+Math.floor(Math.sin(j/6+i)*1.3),yy=y+j;
+          if(xx>=2&&xx<94&&yy<91 && (j<5||r()>.22))mask[yy*96+xx]=1;
         }
-        mask[y*72+x]=inside?1:0;
       }
     }
-    for(let y=4;y<68;y++){
-      for(let x=3;x<69;x++){
-        if(!mask[y*72+x])continue;
-        const edge=!mask[(y-2)*72+x]||!mask[(y+2)*72+x]||!mask[y*72+x-2]||!mask[y*72+x+2];
-        const v=r();
-        let col;
-        if(edge || (y>50&&v<.72))col=dark;
-        else if(y>44&&v<.28)col=violet;
-        else if(v<.12)col=dark;
-        else if(v<.22)col=violet;
-        else if(v>.89 && y<49)col=leafBright;
-        else if(v>.57)col=leafHi;
-        else col=leaf;
-        pix(g,x,y,1,1,col);
-      }
+    // Conifers have clear stepped shoulders.
+    for(let y=5;y<91;y++)for(let x=2;x<94;x++){
+      if(!mask[y*96+x])continue;
+      const edge=!mask[(y-2)*96+x]||!mask[(y+2)*96+x]||!mask[y*96+x-2]||!mask[y*96+x+2];
+      const v=r();
+      const band=(Math.floor(x/6)+Math.floor(y/5)+variant)%7;
+      let col;
+      if(edge || (y>68 && v<.55))col=dark;
+      else if(v<.11 || (band===0&&v<.50))col=shadow;
+      else if(v>.87 && y<65)col=highlight;
+      else if(v>.47)col=light;
+      else col=leaf;
+      pix(g,x,y,1,1,col);
     }
-    // Short dark jagged lines convey clumps and interlocking leaves, not blobs.
-    for(let i=0;i<112;i++){
-      const x=7+Math.floor(r()*58),y=9+Math.floor(r()*48);
-      if(!mask[y*72+x])continue;
-      const len=2+Math.floor(r()*7);
-      const shade=r()>.86?(dusk?"#9185a6":"#61969a"):r()>.36?(dusk?"#372852":"#3b315a"):(dusk?"#4a3568":"#504063");
+    // Leaf clusters have directional strokes. Short upward flecks on pines,
+    // flat branch contours on spreading trees, long downward strands on willows.
+    const marks=species===1?155:species===3?95:170;
+    for(let i=0;i<marks;i++){
+      const x=3+Math.floor(r()*90),y=9+Math.floor(r()*74);
+      if(!mask[y*96+x])continue;
+      const len=2+Math.floor(r()*(species===4?9:7));
+      const shade=r()>.84?highlight:r()>.45?dark:shadow;
       for(let k=0;k<len;k++){
-        const xx=x+k,yy=y+Math.floor(Math.sin(k*.9+i)*1.5);
-        if(xx<69&&mask[clamp(yy,0,87)*72+xx])pix(g,xx,yy,1,1,shade);
+        const xx=species===1?x+Math.floor(k*.3):species===4?x+Math.floor(Math.sin(k*.7+i)*1.3):x+k;
+        const yy=species===1?y-k:species===4?y+k:y+Math.floor(Math.sin(k*.85+i)*1.2);
+        if(xx>=2&&xx<94&&yy>=4&&yy<91&&mask[yy*96+xx])pix(g,xx,yy,1,1,shade);
       }
-      if(r()>.47)pix(g,x+len-2,y+2,2,1,shade);
+      if(species===0||species===2)if(r()>.65)pix(g,x+2,y+2,2,1,shadow);
     }
-    for(let i=0;i<9;i++){
-      const x=14+Math.floor(r()*44),y=10+Math.floor(r()*44);
-      if(mask[y*72+x])pix(g,x,y,1+r()*1.3|0,2,r()>.6?(dusk?"#b5a7bc":"#b7c4b0"):(dusk?"#967eb0":"#6ca5a1"));
+    for(let i=0;i<12;i++){
+      const x=10+Math.floor(r()*74),y=9+Math.floor(r()*62);
+      if(mask[y*96+x])pix(g,x,y,r()>.5?2:1,2,highlight);
     }
     return c;
   }
   function buildTreeSprites(){
-    for(let i=0;i<9;i++)crownSprites.push(makeCrown(i));
-    for(let i=0;i<9;i++)crownSprites.push(makeCrown(i,true));
+    for(let species=0;species<5;species++){
+      for(let dusk=0;dusk<2;dusk++){
+        for(let variant=0;variant<6;variant++){
+          crownSprites.push(makeCrown(variant,!!dusk,species));
+        }
+      }
+    }
   }
 
   function drawStone(g,x,y,size=3,kind=0){
@@ -429,7 +513,7 @@
     for(const t of trees){
       if(Math.abs(t.y-entity.y)>13||Math.abs(t.x-entity.x)>13)continue;
       const dx=entity.x-t.x,dy=entity.y-t.y;
-      const min=radius+5,d2=dx*dx+dy*dy;
+      const min=radius+t.trunkRadius,d2=dx*dx+dy*dy;
       if(d2<min*min){
         const d=Math.max(.01,Math.sqrt(d2));
         entity.x+=dx/d*(min-d);entity.y+=dy/d*(min-d);
@@ -614,10 +698,10 @@
   }
 
   function drawTree(g,t){
-    const sprite=crownSprites[t.sprite+(t.twilight?9:0)];
-    // The y-offset includes an entire visible trunk, giving a lowered-camera illusion.
+    const sprite=crownSprites[t.species*12+(t.twilight?6:0)+t.sprite];
     const sway=Math.sin(time*.65+t.sway)>0.93?1:0;
-    g.drawImage(sprite,Math.round(t.x-35)+sway,Math.round(t.y-79));
+    const w=Math.round(96*t.size),h=Math.round(108*t.size);
+    g.drawImage(sprite,Math.round(t.x-w/2)+sway,Math.round(t.y-94*t.size),w,h);
   }
   function drawPlayer(g){
     const fr=(Math.floor(player.step)%2);
@@ -668,7 +752,7 @@
     // Sort trunks, sheep, dog and ancient standing stones by foot position.
     const actors=[];
     for(const t of trees){
-      if(t.x<cx-75||t.x>cx+screenW+75||t.y<cy-8||t.y>cy+screenH+95)continue;
+      if(t.x<cx-110||t.x>cx+screenW+110||t.y<cy-25||t.y>cy+screenH+150)continue;
       actors.push({y:t.y,kind:0,object:t});
     }
     for(const s of sheep){
