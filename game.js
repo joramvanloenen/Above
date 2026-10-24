@@ -44,6 +44,10 @@
   const mapRand = seeded(493);
   const rbetween = (lo, hi) => lo + (hi - lo) * mapRand();
   const smoothstep = (a, b, v) => { const x = clamp((v - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+  function duskWeight(x,y){
+    const dx=(x-1450)/290,dy=(y-340)/215;
+    return 1-smoothstep(.5,1.18,dx*dx+dy*dy);
+  }
   const pathSegments = [
     [684,706,684,940], [684,706,905,825], [684,706,470,505],
     [905,825,1150,1025], [470,505,315,350], [905,825,1125,515]
@@ -122,11 +126,22 @@
         if(i%3===0)noisePatch(g,x+rbetween(-7,7),y+rbetween(-7,7),rbetween(7,14),rbetween(5,10),"#b2b984",.36);
       }
     }
+    // A distant, lilac-coloured forest echoes the twilight sequence in the references.
+    for(let y=120;y<565;y+=2)for(let x=1110;x<1770;x+=2){
+      const w=duskWeight(x,y);
+      if(w>0 && mapRand()<w*.98){
+        const p=mapRand();
+        pix(g,x,y,2,2,p<.19?"#9d8487":p<.83?"#957e81":"#927a80");
+      }
+    }
     for(let i=0;i<11500;i++){
       const x=Math.floor(rbetween(3,W-3)),y=Math.floor(rbetween(3,H-3));
       const val=mapRand();
       if(val<.49)continue;
-      const color=val<.65?"#88a77c":val<.81?"#849f83":val<.94?"#c0ba7d":"#e3ca88";
+      const dusk=duskWeight(x,y)>.35;
+      const color=dusk
+        ? (val<.7?"#a18d91":val<.87?"#816f82":val<.96?"#c2a2a1":"#d9b39e")
+        : (val<.65?"#88a77c":val<.81?"#849f83":val<.94?"#c0ba7d":"#e3ca88");
       const w=mapRand()<.23?1:2,h=mapRand()<.55?1:2;
       pix(g,x,y,w,h,color);
       if(mapRand()>.8)pix(g,x+4,y+1,2,1,color);
@@ -174,7 +189,7 @@
         const xx=x+rbetween(-39,39),yy=y+rbetween(-33,33);
         if(xx<15||xx>W-15||yy<30||yy>H-15)continue;
         if(meadowWeight(xx,yy)>.53)continue;
-        trees.push({x:xx,y:yy,sprite:Math.floor(mapRand()*9),sway:mapRand()*TAU});
+        trees.push({x:xx,y:yy,sprite:Math.floor(mapRand()*9),twilight:duskWeight(xx,yy)>.6,sway:mapRand()*TAU});
       }
     }
     // Deliberate wooded borders frame the opening meadow.
@@ -183,7 +198,7 @@
       for(let i=0;i<count;i++){
         const x=cx+rbetween(-34,34),y=cy+rbetween(-75,75);
         if(meadowWeight(x,y)>.58)continue;
-        trees.push({x,y,sprite:Math.floor(mapRand()*9),sway:mapRand()*TAU});
+        trees.push({x,y,sprite:Math.floor(mapRand()*9),twilight:duskWeight(x,y)>.6,sway:mapRand()*TAU});
       }
     }
     trees.sort((a,b)=>a.y-b.y);
@@ -206,8 +221,13 @@
     }
   }
 
-  function makeCrown(variant){
+  function makeCrown(variant,dusk=false){
     const c=makeCanvas(72,88),g=c.getContext("2d"),r=seeded(1509+variant*47);
+    const dark=dusk?"#372852":PAL.deep;
+    const violet=dusk?"#50366e":PAL.violet;
+    const leaf=dusk?"#5c437d":PAL.leaf;
+    const leafHi=dusk?"#70548a":PAL.leafHi;
+    const leafBright=dusk?"#80689b":PAL.leafBright;
     const lobes=[
       [35,31,24,24],[21,39,15,17],[49,38,15,19],
       [34,17,20,14],[19,25,12,13],[52,26,13,16],
@@ -217,7 +237,7 @@
     ];
     // Cast shadow at the foot, then trunk, then several layers of canopy.
     pix(g,13,76,50,4,"#86a37b");pix(g,17,80,41,3,"#8ca87c");
-    pix(g,32,52,8,28,PAL.deep);
+    pix(g,32,52,8,28,dark);
     pix(g,35,52,3,28,"#564362");
     pix(g,33,66,2,13,"#76576e");
     const mask=new Uint8Array(72*88);
@@ -238,13 +258,13 @@
         const edge=!mask[(y-2)*72+x]||!mask[(y+2)*72+x]||!mask[y*72+x-2]||!mask[y*72+x+2];
         const v=r();
         let col;
-        if(edge || (y>50&&v<.72))col=PAL.deep;
-        else if(y>44&&v<.28)col=PAL.violet;
-        else if(v<.12)col=PAL.deep;
-        else if(v<.22)col=PAL.violet;
-        else if(v>.89 && y<49)col=PAL.leafBright;
-        else if(v>.57)col=PAL.leafHi;
-        else col=PAL.leaf;
+        if(edge || (y>50&&v<.72))col=dark;
+        else if(y>44&&v<.28)col=violet;
+        else if(v<.12)col=dark;
+        else if(v<.22)col=violet;
+        else if(v>.89 && y<49)col=leafBright;
+        else if(v>.57)col=leafHi;
+        else col=leaf;
         pix(g,x,y,1,1,col);
       }
     }
@@ -253,7 +273,7 @@
       const x=7+Math.floor(r()*58),y=9+Math.floor(r()*48);
       if(!mask[y*72+x])continue;
       const len=2+Math.floor(r()*7);
-      const shade=r()>.86?"#61969a":r()>.36?"#3b315a":"#504063";
+      const shade=r()>.86?(dusk?"#9185a6":"#61969a"):r()>.36?(dusk?"#372852":"#3b315a"):(dusk?"#4a3568":"#504063");
       for(let k=0;k<len;k++){
         const xx=x+k,yy=y+Math.floor(Math.sin(k*.9+i)*1.5);
         if(xx<69&&mask[clamp(yy,0,87)*72+xx])pix(g,xx,yy,1,1,shade);
@@ -262,11 +282,14 @@
     }
     for(let i=0;i<9;i++){
       const x=14+Math.floor(r()*44),y=10+Math.floor(r()*44);
-      if(mask[y*72+x])pix(g,x,y,1+r()*1.3|0,2,r()>.6?"#b7c4b0":"#6ca5a1");
+      if(mask[y*72+x])pix(g,x,y,1+r()*1.3|0,2,r()>.6?(dusk?"#b5a7bc":"#b7c4b0"):(dusk?"#967eb0":"#6ca5a1"));
     }
     return c;
   }
-  function buildTreeSprites(){for(let i=0;i<9;i++)crownSprites.push(makeCrown(i));}
+  function buildTreeSprites(){
+    for(let i=0;i<9;i++)crownSprites.push(makeCrown(i));
+    for(let i=0;i<9;i++)crownSprites.push(makeCrown(i,true));
+  }
 
   function drawStone(g,x,y,size=3,kind=0){
     pix(g,x-size-1,y+1,size*2+3,2,"#849d79");
@@ -591,7 +614,7 @@
   }
 
   function drawTree(g,t){
-    const sprite=crownSprites[t.sprite];
+    const sprite=crownSprites[t.sprite+(t.twilight?9:0)];
     // The y-offset includes an entire visible trunk, giving a lowered-camera illusion.
     const sway=Math.sin(time*.65+t.sway)>0.93?1:0;
     g.drawImage(sprite,Math.round(t.x-35)+sway,Math.round(t.y-79));
