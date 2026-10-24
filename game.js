@@ -76,7 +76,7 @@
 
   let screenW=0,screenH=0,camX=0,camY=0,time=0,last=0;
   let barkTime=-10, noticeTimer=0, ringGlow=0, win=false, homed=0;
-  const player={x:680,y:821,angle:-Math.PI/2,face:"up",step:0,speed:37};
+  const player={x:680,y:821,angle:-Math.PI/2,face:"up",step:0,speed:83,moving:0};
   let currentInput=null;
   const trees=[],sheep=[],stones=[],moths=[],particles=[],flowers=[],relics=[];
   const crownSprites=[],sheepSprites={};
@@ -497,8 +497,10 @@
       const a=i*2.39996,d=4+Math.sqrt(i)*6;
       const x=cx+Math.cos(a)*d,y=cy+Math.sin(a)*d;
       sheep.push({x,y,vx:0,vy:0,group:id,dir:"right",phase:rbetween(0,TAU),
-        wander:rbetween(0,TAU),clock:rbetween(.1,2),panic:0,spot:i%4===0,
-        home:false,hop:0,rest:rbetween(.1,2)});
+        wander:rbetween(0,TAU),clock:rbetween(.5,2.2),panic:0,spot:i%4===0,
+        home:false,pace:rbetween(.83,1.2),bravery:rbetween(.84,1.23),
+        state:i%4===0?"walk":"graze",stateTimer:rbetween(.6,3),
+        fleeX:0,fleeY:0,motion:0});
     }
   }
   function spawnLife(){
@@ -563,11 +565,14 @@
     for(const s of sheep){
       if(s.home)continue;
       const dx=s.x-player.x,dy=s.y-player.y,d=Math.hypot(dx,dy);
-      if(d<89){
-        const power=1-d/100;
-        s.vx+=(dx/Math.max(1,d))*power*31;
-        s.vy+=(dy/Math.max(1,d))*power*31;
-        s.panic=Math.max(s.panic,1.1+power);
+      if(d<112){
+        const power=1-d/125;
+        const fx=dx/Math.max(1,d),fy=dy/Math.max(1,d);
+        s.vx+=fx*power*42;
+        s.vy+=fy*power*42;
+        s.fleeX=fx;s.fleeY=fy;
+        s.panic=Math.max(s.panic,2.1+power*1.2);
+        s.state="flee";s.stateTimer=0;
       }
     }
     for(const relic of relics){
@@ -586,13 +591,14 @@
       const d=Math.hypot(ax,ay);
       if(d>7){strength=clamp((d-7)/35,0,1);dx=ax/d;dy=ay/d;}
     }
+    player.moving=strength;
     if(strength>.04){
       const speed=player.speed*strength;
       player.x+=dx*speed*dt;player.y+=dy*speed*dt;
       player.angle=Math.atan2(dy,dx);
       if(Math.abs(dx)>Math.abs(dy)*.85)player.face=dx>0?"right":"left";
       else player.face=dy>0?"down":"up";
-      player.step+=dt*10*strength;
+      player.step+=dt*16*strength;
       if(Math.random()<dt*3*strength)addParticles(player.x,player.y,"#bec08d",1);
     }
     collideTrees(player,4);
@@ -601,9 +607,10 @@
   function updateSheep(dt) {
     for(let i=0;i<sheep.length;i++){
       const s=sheep[i];
-      s.phase+=dt*(s.home?1:2);
+      s.phase+=dt;
       if(s.home){
-        s.vx*=Math.exp(-dt*2);s.vy*=Math.exp(-dt*2);
+        s.state="graze";s.motion=0;
+        s.vx*=Math.exp(-dt*4);s.vy*=Math.exp(-dt*4);
         s.x+=s.vx*dt;s.y+=s.vy*dt;
         const d=distance(s,HOME);
         if(d>27){
@@ -612,46 +619,131 @@
         }
         continue;
       }
+      // Sheep have their own temperaments: cautious, restless or unhurried.
       s.clock-=dt;
-      if(s.clock<=0){s.clock=rand(.8,2.6);s.wander+=rand(-1.8,1.8);}
-      s.panic=Math.max(0,s.panic-dt);
-      const panic=s.panic>0;
-      let ax=Math.cos(s.wander)*2.1,ay=Math.sin(s.wander)*2.1;
-      let n=0,groupX=0,groupY=0,alignX=0,alignY=0;
+      if(s.clock<=0){
+        s.clock=rand(.7,2.2);
+        s.wander+=rand(-1.2,1.2);
+      }
+      const dx=s.x-player.x,dy=s.y-player.y;
+      const dogDist=Math.max(.001,Math.hypot(dx,dy));
+      const danger=(player.moving>.23?53:36)/s.bravery;
+      const aware=danger+28;
+      if(dogDist<danger){
+        const urgency=(danger-dogDist)/danger;
+        s.panic=Math.max(s.panic,.95+urgency*1.4);
+        s.fleeX=dx/dogDist;s.fleeY=dy/dogDist;
+        s.state="flee";
+      }else if(dogDist<aware && s.panic<.1 && s.state!=="alert"){
+        // Sheep raise their heads and watch the approaching dog.
+        s.state="alert";s.stateTimer=rand(.35,.8);
+        s.dir=Math.abs(dx)>Math.abs(dy)?(dx<0?"right":"left"):(dy<0?"down":"up");
+      }
+      let near=0,groupX=0,groupY=0,alignX=0,alignY=0;
+      let sepX=0,sepY=0,alarmedNeighbor=null;
       for(let j=0;j<sheep.length;j++){
         if(i===j)continue;
-        const o=sheep[j],ox=o.x-s.x,oy=o.y-s.y,d2=ox*ox+oy*oy;
-        if(d2<110 && d2>.001){
-          const f=(11-Math.sqrt(d2))*.7;
-          ax-=ox*f;ay-=oy*f;
+        const o=sheep[j];
+        const ox=o.x-s.x,oy=o.y-s.y,d2=ox*ox+oy*oy;
+        if(d2<.01)continue;
+        if(d2<14*14){
+          const d=Math.sqrt(d2),force=(14-d)/d;
+          sepX-=ox*force;sepY-=oy*force;
         }
-        if(o.group!==s.group||o.home||d2>70*70)continue;
-        n++;groupX+=o.x;groupY+=o.y;alignX+=o.vx;alignY+=o.vy;
+        if(o.home||o.group!==s.group||d2>75*75)continue;
+        near++;groupX+=o.x;groupY+=o.y;
+        alignX+=o.vx;alignY+=o.vy;
+        if(d2<28*28 && o.panic>1.25 && !alarmedNeighbor)alarmedNeighbor=o;
       }
-      if(n){
-        const pull=panic?.025:.09;
-        ax+=(groupX/n-s.x)*pull;ay+=(groupY/n-s.y)*pull;
-        ax+=(alignX/n-s.vx)*.14;ay+=(alignY/n-s.vy)*.14;
+      // A bolting animal can startle neighbours, producing a believable flock wave.
+      if(s.panic<.06 && alarmedNeighbor && Math.random()<dt*1.7){
+        s.panic=rand(.9,1.45);
+        const d=Math.max(1,Math.hypot(s.x-alarmedNeighbor.x,s.y-alarmedNeighbor.y));
+        s.fleeX=(s.x-alarmedNeighbor.x)/d*.35+alarmedNeighbor.fleeX*.65;
+        s.fleeY=(s.y-alarmedNeighbor.y)/d*.35+alarmedNeighbor.fleeY*.65;
+        s.state="flee";
       }
-      const ddx=s.x-player.x,ddy=s.y-player.y,dogDist=Math.hypot(ddx,ddy);
-      if(dogDist<25){
-        const p=(25-dogDist)/25;
-        ax+=(ddx/Math.max(1,dogDist))*p*35;
-        ay+=(ddy/Math.max(1,dogDist))*p*35;
+      s.panic=Math.max(0,s.panic-dt);
+      s.stateTimer-=dt;
+      if(s.panic<=0 && s.state==="flee"){
+        // After flight, sheep slow to a trot and find the group again.
+        s.state="walk";s.stateTimer=rand(1.3,2.8);
       }
-      if(panic){ax+=s.vx*.25;ay+=s.vy*.25;}
-      const friction=Math.exp(-dt*(panic?1.35:2.4));
-      s.vx=(s.vx+ax*dt)*friction;
-      s.vy=(s.vy+ay*dt)*friction;
-      const max=panic?32:8,sp=Math.hypot(s.vx,s.vy);
-      if(sp>max){s.vx=s.vx/sp*max;s.vy=s.vy/sp*max;}
+      if(s.panic<=0 && s.stateTimer<=0){
+        const roll=Math.random();
+        if(s.state==="alert" || s.state==="graze"){
+          s.state=roll<.72?"walk":"graze";
+          s.stateTimer=s.state==="walk"?rand(1.1,3):rand(1.4,3.5);
+        }else{
+          s.state=roll<.64?"graze":roll<.92?"walk":"play";
+          s.stateTimer=s.state==="graze"?rand(1.5,4):s.state==="play"?rand(.4,.95):rand(1.2,3.2);
+          if(s.state==="play")s.wander+=rand(-1.1,1.1);
+        }
+      }
+      let targetX=0,targetY=0,targetSpeed=0;
+      if(s.panic>.02){
+        s.state="flee";
+        let fx=s.fleeX,fy=s.fleeY;
+        if(dogDist<112){
+          const dogWeight=clamp((112-dogDist)/65,.2,.9);
+          fx=lerp(fx,dx/dogDist,dogWeight);
+          fy=lerp(fy,dy/dogDist,dogWeight);
+          s.fleeX=fx;s.fleeY=fy;
+        }
+        if(near){
+          // Keep a little lateral flock coherence without cancelling the escape.
+          fx+=(alignX/near)*.006;
+          fy+=(alignY/near)*.006;
+        }
+        fx+=sepX*.15;fy+=sepY*.15;
+        const mag=Math.max(.01,Math.hypot(fx,fy));
+        targetSpeed=(s.panic>.55?67:38)*s.pace;
+        targetX=fx/mag*targetSpeed;targetY=fy/mag*targetSpeed;
+      }else if(s.state==="walk"||s.state==="play"){
+        let wx=Math.cos(s.wander),wy=Math.sin(s.wander);
+        if(near){
+          const cx=groupX/near-s.x,cy=groupY/near-s.y;
+          const d=Math.hypot(cx,cy);
+          if(d>17){
+            const cohesion=clamp((d-17)/35,0,.65);
+            wx=lerp(wx,cx/d,cohesion);wy=lerp(wy,cy/d,cohesion);
+          }
+        }
+        wx+=sepX*.16;wy+=sepY*.16;
+        const mag=Math.max(.01,Math.hypot(wx,wy));
+        targetSpeed=(s.state==="play"?30:19)*s.pace;
+        targetX=wx/mag*targetSpeed;targetY=wy/mag*targetSpeed;
+      }else if(s.state==="alert"){
+        // Freeze briefly and assess the dog; resume browsing when safe.
+        if(dogDist>aware+17)s.stateTimer=0;
+      }
+      // Smooth acceleration and deceleration, but let panic feel sudden and explosive.
+      const response=s.panic>.02?8.5:targetSpeed?3.5:5.2;
+      const blend=1-Math.exp(-dt*response);
+      s.vx=lerp(s.vx,targetX,blend);
+      s.vy=lerp(s.vy,targetY,blend);
+      let speed=Math.hypot(s.vx,s.vy);
+      const maxSpeed=78*s.pace;
+      if(speed>maxSpeed){
+        s.vx*=maxSpeed/speed;s.vy*=maxSpeed/speed;
+        speed=maxSpeed;
+      }
+      const prevX=s.x,prevY=s.y;
       s.x+=s.vx*dt;s.y+=s.vy*dt;
       collideTrees(s,2.4);
-      if(sp>2){
+      // A trunk blocks a sheep instead of silently absorbing it.
+      if(Math.hypot(s.x-(prevX+s.vx*dt),s.y-(prevY+s.vy*dt))>.2){
+        s.vx*=.55;s.vy*=.55;
+        s.wander+=rand(-1.5,1.5);
+      }
+      s.motion=speed;
+      if(speed>3){
         if(Math.abs(s.vx)>Math.abs(s.vy)*.75)s.dir=s.vx>0?"right":"left";
         else s.dir=s.vy>0?"down":"up";
       }
-      // Inside the circle, sheep settle down and stay safe.
+      if(s.panic>.3 && speed>32 && Math.random()<dt*4)
+        addParticles(s.x,s.y,"#c5bd8f",1);
+      // A sheep reaching the stone circle becomes safe and no longer flees.
       if(Math.hypot(s.x-HOME.x,(s.y-HOME.y)*1.35)<HOME.r-1){
         s.home=true;s.panic=0;homed++;ringGlow=1.4;
         addParticles(s.x,s.y-6,"#f1e6bb",15);
@@ -712,9 +804,13 @@
     }
   }
   function drawSheep(g,s){
-    const fr=Math.floor(s.phase*1.8)%2;
+    const running=s.motion>30;
+    const walking=s.motion>4;
+    const fr=walking?Math.floor(s.phase*(running?15:7))%2:0;
+    const nod=!walking&&s.state==="graze"&&Math.sin(s.phase*3)>.35?1:0;
+    const hop=running&&Math.sin(s.phase*19)>.1?2:0;
     const key=s.dir+fr+(s.spot?1:0);
-    g.drawImage(sheepSprites[key],Math.round(s.x-9),Math.round(s.y-14));
+    g.drawImage(sheepSprites[key],Math.round(s.x-9),Math.round(s.y-14+nod-hop));
   }
   function drawMoths(g){
     for(const m of moths){
