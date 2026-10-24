@@ -7,7 +7,8 @@ A little, touchscreen-only, top-down pixel-art adventure about a sheepdog, the f
 ## Playing
 
 - **Touch and drag anywhere** to walk in that direction. Movement uses an invisible analogue joystick with its origin under your finger; lift your finger to stop.
-- **Tap BARK** to bark. Nearby sheep move away from the dog, so get behind them and guide them toward the pale stone circle.
+- **Tap BARK** to bark. Nearby sheep bolt away from a bark, so get behind them and guide them toward the pale stone circle. Sheep also flee from a dog that gets too close, and settle back down once the danger passes.
+- Sheep graze, watch approaching movement, ramble, occasionally dart about, startle each other, flee and regroup. The dog runs much faster than in the initial prototype.
 - Bring **8 sheep** to the home circle to complete the first objective.
 - Explore the woodland for **three old wind chimes**. Bark close to them to wake them.
 
@@ -15,7 +16,7 @@ There are no on-screen directional controls, keyboard requirements, asset downlo
 
 ## Art direction
 
-A muted yellow-green meadow with tiny patches of wildflowers and grass; thick clumps of blue-green foliage with jagged plum shadows; ivory sheep, warm lavender ruins, and soft displaced tree shadows. Sprites have visible trunks, layered crowns and flattened elliptical ground footprints, implying a camera tilted slightly lower than perfectly overhead. Rendered with a low-resolution canvas and integer pixel snapping for sharp pixels on a mobile phone.
+A muted yellow-green meadow with tiny patches of wildflowers and grass; thick clumps of blue-green foliage with jagged plum shadows, five distinct tree families (rounded, conifer, wide-spreading, coppice and willow), varied sizes and warm-violet twilight groves; ivory sheep, warm lavender ruins, and soft displaced tree shadows. Sprites have visible trunks, layered crowns and flattened elliptical ground footprints, implying a camera tilted slightly lower than perfectly overhead. Rendered with a low-resolution canvas and integer pixel snapping for sharp pixels on a mobile phone.
 
 ## Architecture
 
