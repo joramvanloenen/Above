@@ -1427,6 +1427,186 @@
     }
   }
 
+
+  function drawCryptBackdrop(g){
+    g.fillStyle="#252737";g.fillRect(0,0,screenW,screenH);
+    const x=tombRect.x,y=tombRect.y,w=tombRect.w,h=tombRect.h;
+    g.fillStyle=underground===1?"#44404e":underground===2?"#34444b":"#3d4450";
+    g.fillRect(x,y,w,h);
+    // Large stone flags, cracks and uneven mortar, rendered at game resolution.
+    for(let iy=0;iy<Math.floor(h/18);iy++)for(let ix=0;ix<Math.floor(w/22)+1;ix++){
+      const xx=x+ix*22+(iy%2?11:0),yy=y+iy*18;
+      pix(g,xx,yy,20,1,"#292b3b");
+      pix(g,xx,yy,1,17,"#303444");
+      const seed=((ix*47+iy*13+underground*19)%11);
+      if(seed<3)pix(g,xx+6,yy+7,seed+2,1,"#67616a");
+      if(seed===6)pix(g,xx+13,yy+11,5,1,"#565668");
+    }
+    // Inner heavy masonry border and steps into the chamber.
+    g.fillStyle="#1d2430";g.fillRect(x-9,y-11,w+18,14);
+    g.fillRect(x-9,y+h-1,w+18,11);
+    g.fillRect(x-9,y-4,12,h+8);g.fillRect(x+w-3,y-4,12,h+8);
+    g.fillStyle="#6c6365";
+    for(let i=0;i<w;i+=19){
+      pix(g,x+i,y-9,17,3,"#777070");
+      pix(g,x+i,y+h+1,16,2,"#57565d");
+    }
+    for(let j=0;j<h;j+=18){
+      pix(g,x-8,y+j,4,16,"#484b57");
+      pix(g,x+w+1,y+j,4,16,"#484b57");
+    }
+    g.fillStyle="#403a46";g.fillRect(184,245,48,19);
+    for(let i=0;i<5;i++){
+      pix(g,187+i*9,249+i*2,8,2,"#9c9094");
+    }
+    pix(g,199,245,15,2,"#c1ae9c");
+    // Burial alcoves, cracked sarcophagi and mossy free-standing columns.
+    for(const p of cryptProps){
+      if(p.room!==underground)continue;
+      const px=p.x,py=p.y;
+      if(p.type==="coffin"){
+        pix(g,px-14,py-19,29,32,"#282a3b");
+        pix(g,px-11,py-17,23,28,"#83767b");
+        pix(g,px-9,py-15,19,24,"#b6a69b");
+        pix(g,px-7,py-12,15,1,"#6b6374");
+        pix(g,px,py-10,2,17,"#736675");
+        pix(g,px-5,py-1,12,2,"#736675");
+      }else if(p.type==="column"){
+        pix(g,px-8,py-7,19,11,"#262a34");
+        pix(g,px-7,py-24,16,20,"#6a6978");
+        pix(g,px-6,py-28,15,5,"#9c9296");
+        pix(g,px-7,py-5,16,5,"#978b8e");
+        pix(g,px-1,py-21,3,14,"#464455");
+      }else{
+        pix(g,px-6,py-7,13,10,"#30313e");
+        pix(g,px-5,py-8,11,10,"#92867c");
+        pix(g,px-3,py-5,7,4,"#6b625c");
+        pix(g,px-1,py-11,3,3,"#acd5ba");
+      }
+    }
+    for(const [tx,ty] of [[55,62],[364,62],[55,223],[364,223]]){
+      pix(g,tx-2,ty-2,6,7,"#d3b588");
+      pix(g,tx-1,ty-7+Math.round(Math.sin(time*7+tx)*2),4,6,"#b3c5a1");
+      pix(g,tx,ty-9,2,3,"#e8e1bd");
+    }
+    g.strokeStyle="#99b9ae";
+    g.globalAlpha=.2;
+    g.strokeRect(x+4,y+4,w-8,h-8);
+    g.globalAlpha=1;
+  }
+  function drawTombEntrance(g,t){
+    const x=Math.round(t.x),y=Math.round(t.y);
+    pix(g,x-22,y+6,45,9,"#7d9580");
+    pix(g,x-19,y-12,39,24,"#4b4556");
+    pix(g,x-16,y-9,32,21,"#93858a");
+    pix(g,x-11,y-3,23,18,"#302c41");
+    pix(g,x-8,y+1,17,12,"#222738");
+    for(let i=0;i<4;i++)pix(g,x-8-i*2,y+6+i*2,18+i*4,2,"#686174");
+    pix(g,x-20,y-16,40,6,"#b3a7a0");
+    pix(g,x-22,y-11,7,23,"#7d7379");
+    pix(g,x+15,y-11,7,23,"#7d7379");
+    pix(g,x-8,y-19,16,2,"#d2c7b5");
+    const glow=Math.sin(time*1.8+t.id)*.16+.7;
+    g.globalAlpha=glow;
+    pix(g,x-3,y+3,6,3,"#a6b5aa");
+    g.globalAlpha=1;
+  }
+  function drawEnemy(g,e){
+    const x=Math.round(e.x),y=Math.round(e.y);
+    const bob=Math.sin(e.phase*(e.type==="slime"?8:3.5));
+    const flash=e.flash>0;
+    if(e.type==="ghost"){
+      g.globalAlpha=flash?.95:.57+.15*Math.sin(e.phase*2);
+      const yy=y-13-Math.round(bob*3);
+      pix(g,x-10,yy+18,20,2,"#506877");
+      pix(g,x-7,yy+1,14,20,"#b1d5c6");
+      pix(g,x-6,yy-2,12,10,flash?"#f7f1d9":"#ceeadd");
+      pix(g,x-8,yy+6,16,9,"#9ac5c6");
+      for(let i=0;i<4;i++)pix(g,x-7+i*4,yy+18,3,(i%2?4:7),"#97b3bb");
+      pix(g,x-5,yy+6,2,3,"#444960");pix(g,x+3,yy+6,2,3,"#444960");
+      pix(g,x-2,yy+10,4,2,"#617c83");
+      g.globalAlpha=1;
+    }else if(e.type==="slime"){
+      const hop=Math.max(0,bob)*3,yy=y-Math.round(hop);
+      pix(g,x-10,y+1,22,3,"#8a9f75");
+      pix(g,x-9,yy-7,18,10,flash?"#f7e6be":"#416d55");
+      pix(g,x-10,yy-4,20,7,flash?"#f7e6be":"#6aa369");
+      pix(g,x-7,yy-10,14,9,"#7fbc73");
+      pix(g,x-4,yy-8,4,3,"#a9cf7f");
+      pix(g,x+3,yy-5,3,3,"#b3d891");
+      pix(g,x-5,yy-3,2,2,"#34445a");pix(g,x+4,yy-3,2,2,"#34445a");
+    }else if(e.type==="bandit"){
+      const step=Math.sin(e.phase*6)>0?1:0;
+      pix(g,x-9,y+1,18,2,"#84957e");
+      pix(g,x-6,y-6+step,5,9,"#342f44");pix(g,x+2,y-6-step,5,9,"#342f44");
+      pix(g,x-8,y-21,17,17,"#3b3146");
+      pix(g,x-6,y-19,13,13,flash?"#e4d7ba":"#725367");
+      pix(g,x-4,y-16,8,7,"#5c434e");
+      pix(g,x-9,y-24,18,11,"#382e49");
+      pix(g,x-6,y-20,12,5,"#c0a288");
+      pix(g,x-5,y-19,4,2,"#252637");pix(g,x+2,y-19,4,2,"#252637");
+      pix(g,x-9,y-12,4,9,"#4a3c49");pix(g,x+7,y-12,4,9,"#4a3c49");
+      pix(g,x+10,y-11,2,13,"#c6c0ae");
+      pix(g,x+9,y-11,4,2,"#665066");
+    }else if(e.type==="boss"){
+      const bounce=Math.sin(e.phase*1.3)*2;
+      const yy=y+Math.round(bounce);
+      pix(g,x-34,yy+1,68,7,"#777b64");
+      pix(g,x-29,yy-17,59,20,flash?"#e7cf9e":"#5b5147");
+      pix(g,x-27,yy-34,54,30,flash?"#d1b896":"#736957");
+      pix(g,x-20,yy-43,40,18,"#675747");
+      pix(g,x-21,yy-48,15,17,"#514637");
+      pix(g,x+7,yy-46,15,17,"#514637");
+      pix(g,x-15,yy-35,12,9,"#352e38");
+      pix(g,x+6,yy-35,12,9,"#352e38");
+      pix(g,x-12,yy-34,6,5,"#efba72");pix(g,x+9,yy-34,6,5,"#efba72");
+      pix(g,x-5,yy-21,12,5,"#3f3538");
+      for(let i=0;i<9;i++)pix(g,x-30+i*7,yy-6+i%3*2,4,10,"#877759");
+      pix(g,x-34,yy-17,8,24,"#5a493c");pix(g,x+27,yy-17,8,24,"#55473b");
+      pix(g,x-24,yy-45,9,5,"#a39470");
+      pix(g,x+15,yy-43,7,4,"#a39470");
+      if(e.windup>0){
+        g.strokeStyle="#e3b988";g.globalAlpha=.7;
+        g.beginPath();g.ellipse(e.x,e.y,35+Math.sin(time*12)*4,20,0,0,TAU);g.stroke();
+        g.globalAlpha=1;
+      }
+    }
+    if(e.hp<e.maxHp && !e.dead && e.type!=="boss"){
+      pix(g,x-10,y-(e.type==="ghost"?31:29),20,2,"#342f45");
+      pix(g,x-10,y-(e.type==="ghost"?31:29),Math.max(1,20*e.hp/e.maxHp),2,"#ca8a88");
+    }
+  }
+  function drawBolts(g){
+    for(const bolt of bolts){
+      if(bolt.room!==underground)continue;
+      const a=Math.atan2(bolt.vy,bolt.vx);
+      g.save();
+      g.translate(Math.round(bolt.x),Math.round(bolt.y));
+      g.rotate(a);
+      pix(g,-6,-1,12,2,"#dfd2ad");
+      pix(g,5,-2,3,4,"#f4eee2");
+      pix(g,-6,-3,3,6,"#858f91");
+      g.restore();
+    }
+  }
+  function drawCrypt(){
+    const cx=Math.round(camX),cy=Math.round(camY);
+    ctx.fillStyle="#252737";ctx.fillRect(0,0,screenW,screenH);
+    ctx.save();ctx.translate(-cx,-cy);
+    drawCryptBackdrop(ctx);
+    const ordered=[];
+    for(const e of enemies)if(!e.dead&&inCurrentRoom(e))ordered.push({y:e.y,type:"enemy",o:e});
+    ordered.push({y:player.y,type:"knight",o:player},{y:dog.y,type:"dog",o:dog});
+    ordered.sort((a,b)=>a.y-b.y);
+    for(const a of ordered){
+      if(a.type==="enemy")drawEnemy(ctx,a.o);
+      else if(a.type==="knight")drawKnight(ctx);
+      else drawDog(ctx);
+    }
+    drawBolts(ctx);drawParticles(ctx);
+    ctx.restore();
+  }
+
   function drawWorld(){
     // Snap camera to integer world pixels to preserve crisp, stable nearest-neighbour pixels.
     const cx=Math.round(camX),cy=Math.round(camY);
