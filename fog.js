@@ -360,7 +360,9 @@
     // stay nearest-neighbor crisp and HUD remains clear.
     draw(ctx, foreground=false) {
       if(!this.cols)return;
-      if(this.volume && this.volume.ready && this.volume.draw(ctx,this,foreground))return;
+      // The GPU now composites the completed scene once, after all actors
+      // have been drawn. Never draw the old flat premultiplied fog passes.
+      if(this.volume && this.volume.ready)return;
       if(!this.image)this.renderTexture();
       ctx.save();
       ctx.imageSmoothingEnabled=true;
@@ -378,6 +380,11 @@
         this.ox*this.cell, this.oy*this.cell+offset,
         this.cols*this.cell, this.rows*this.cell);
       ctx.restore();
+    }
+    composite(ctx,sceneCanvas,scene) {
+      if(this.volume && this.volume.ready)
+        return this.volume.composite(ctx,sceneCanvas,this,scene);
+      return false;
     }
   }
 
