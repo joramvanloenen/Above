@@ -25,7 +25,9 @@
   const noticeCopy = document.getElementById("notice-copy");
   const hint = document.getElementById("hint");
   const game = document.getElementById("game");
+  const damageFeedback = document.getElementById("damage-feedback");
   const SCALE = 3;
+  const OBJECT_SCALE = .5; // Uniform scale for characters, enemies, vegetation and props.
   const W = 1900, H = 1510, GOAL = 8;
   const HOME = { x: 684, y: 706, r: 34 };
   const PAL = {
@@ -115,6 +117,7 @@
 
   let screenW=0,screenH=0,camX=0,camY=0,time=0,last=0;
   let barkTime=-10, noticeTimer=0, ringGlow=0, win=false, homed=0;
+  let damageFlash=0;
   // The knight starts under player control; both characters always exist in the world.
   const player={x:680,y:821,angle:-Math.PI/2,face:"up",step:0,speed:74,moving:0};
   const dog={x:668,y:839,angle:-Math.PI/2,face:"up",step:0,speed:83,moving:0};
@@ -655,7 +658,7 @@
     for(const t of trees){
       if(Math.abs(t.y-entity.y)>13||Math.abs(t.x-entity.x)>13)continue;
       const dx=entity.x-t.x,dy=entity.y-t.y;
-      const min=radius+t.trunkRadius,d2=dx*dx+dy*dy;
+      const min=(radius+t.trunkRadius)*OBJECT_SCALE,d2=dx*dx+dy*dy;
       if(d2<min*min){
         const d=Math.max(.01,Math.sqrt(d2));
         entity.x+=dx/d*(min-d);entity.y+=dy/d*(min-d);
@@ -800,14 +803,14 @@
   }
 
   function hitSwordTargets() {
-    const radius=sword.step===3?47:35;
+    const radius=(sword.step===3?47:35)*OBJECT_SCALE;
     const cone=sword.step===3?1.65:1.29;
     let found=false;
     for(const o of obstacles){
       if(o.broken)continue;
       const dx=o.x-player.x,dy=(o.y-player.y)*1.12;
       const dist=Math.hypot(dx,dy);
-      if(dist>radius+5)continue;
+      if(dist>radius+3)continue;
       const theta=Math.atan2(dy,dx);
       const diff=Math.atan2(Math.sin(theta-sword.facing),Math.cos(theta-sword.facing));
       if(Math.abs(diff)>cone)continue;
@@ -828,7 +831,7 @@
       if(e.dead||!inCurrentRoom(e))continue;
       const dx=e.x-player.x,dy=e.y-player.y;
       const dist=Math.hypot(dx,dy*1.12);
-      if(dist>radius+e.r)continue;
+      if(dist>radius+e.r*OBJECT_SCALE)continue;
       const theta=Math.atan2(dy,dx);
       const diff=Math.atan2(Math.sin(theta-sword.facing),Math.cos(theta-sword.facing));
       if(Math.abs(diff)>cone)continue;
@@ -1162,7 +1165,7 @@
     g.strokeStyle="#fbedd4";g.globalAlpha=(1-t)*.65;
     g.lineWidth=1;
     for(let i=0;i<3;i++){
-      const r=(12+i*11)+age*64;
+      const r=((12+i*11)+age*64)*OBJECT_SCALE;
       g.beginPath();g.ellipse(dog.x,dog.y-6,r,r*.65,0,0,TAU);g.stroke();
     }
     g.globalAlpha=1;
@@ -1176,8 +1179,8 @@
     let fade=1;
     for(const actor of [player,dog]){
       const dx=Math.abs(actor.x-t.x),dy=actor.y-t.y;
-      if(dx<37*t.size && dy>-80*t.size && dy<11*t.size){
-        const near=1-clamp(dx/(37*t.size),0,1);
+      if(dx<37*t.size*OBJECT_SCALE && dy>-80*t.size*OBJECT_SCALE && dy<8*t.size*OBJECT_SCALE){
+        const near=1-clamp(dx/(37*t.size*OBJECT_SCALE),0,1);
         fade=Math.min(fade,.27+(.33*(1-near)));
       }
     }
@@ -1223,15 +1226,18 @@
     for(const m of moths){
       if(m.x<camX-5||m.x>camX+screenW+5||m.y<camY-5||m.y>camY+screenH+5)continue;
       const wing=Math.sin(time*17+m.phase)>0;
+      g.save();g.translate(Math.round(m.x),Math.round(m.y));
+      g.scale(OBJECT_SCALE,OBJECT_SCALE);g.translate(-Math.round(m.x),-Math.round(m.y));
       pix(g,m.x-2,m.y,wing?2:1,2,"#d8c2aa");
       pix(g,m.x+1,m.y-1,wing?2:1,2,"#e6d7b9");
       pix(g,m.x,m.y,1,2,PAL.deep);
+      g.restore();
     }
   }
   function drawParticles(g){
     for(const p of particles){
       g.globalAlpha=clamp(p.life/p.max,0,1);
-      pix(g,p.x,p.y,p.style==="dot"?2:1,2,p.color);
+      pix(g,p.x,p.y,(p.style==="dot"?2:1)*OBJECT_SCALE,2*OBJECT_SCALE,p.color);
     }
     g.globalAlpha=1;
   }
@@ -1335,6 +1341,7 @@
   function damagePlayer(amount,sourceX,sourceY){
     if(invincible>0||health<=0)return;
     invincible=1.15;
+    damageFlash=1;
     health=Math.max(0,health-amount);healthRefresh();
     addParticles(player.x,player.y-10,"#df9c9c",10);
     if(health>0){
@@ -1399,7 +1406,7 @@
       if(!hit){
         for(const e of enemies.concat([boss])){
           if(e.dead||!inCurrentRoom(e))continue;
-          if(Math.hypot(e.x-b.x,(e.y-8)-b.y)<e.r+7){
+          if(Math.hypot(e.x-b.x,(e.y-4)-b.y)<e.r*OBJECT_SCALE+5){
             const len=Math.hypot(b.vx,b.vy)||1;
             hurtEnemy(e,b.damage,b.vx/len,b.vy/len);
             hit=true;break;
@@ -1469,7 +1476,7 @@
       if(underground!==null){
         e.x=clamp(e.x,51,366);e.y=clamp(e.y,56,246);
       }else if(e.type!=="ghost"&&e.type!=="wisp")collideTrees(e,e.r);
-      if(near && d<e.r+12){
+      if(near && d<e.r*OBJECT_SCALE+8){
         if(e.type==="slime"||e.type==="wolf"){
           if(e.hitTimer<=0 && e.charge>0){
             e.hitTimer=e.type==="wolf"?1.2:1.4;damagePlayer(1,e.x,e.y);
@@ -1508,7 +1515,7 @@
     }else if(boss.charge>0){
       boss.charge-=dt;
       boss.x+=boss.vx*dt;boss.y+=boss.vy*dt;
-      if(d<boss.r+13 && boss.hitTimer<=0){
+      if(d<boss.r*OBJECT_SCALE+8 && boss.hitTimer<=0){
         boss.hitTimer=.8;
         damagePlayer(1,boss.x,boss.y);
       }
@@ -1576,6 +1583,8 @@
     for(const p of cryptProps){
       if(p.room!==underground)continue;
       const px=p.x,py=p.y;
+      g.save();g.translate(Math.round(px),Math.round(py));
+      g.scale(OBJECT_SCALE,OBJECT_SCALE);g.translate(-Math.round(px),-Math.round(py));
       if(p.type==="coffin"){
         pix(g,px-14,py-19,29,32,"#282a3b");
         pix(g,px-11,py-17,23,28,"#83767b");
@@ -1595,6 +1604,7 @@
         pix(g,px-3,py-5,7,4,"#6b625c");
         pix(g,px-1,py-11,3,3,"#acd5ba");
       }
+      g.restore();
     }
     for(const [tx,ty] of [[55,62],[364,62],[55,223],[364,223]]){
       pix(g,tx-2,ty-2,6,7,"#d3b588");
@@ -1728,12 +1738,25 @@
       g.save();
       g.translate(Math.round(bolt.x),Math.round(bolt.y));
       g.rotate(a);
+      g.scale(OBJECT_SCALE,OBJECT_SCALE);
       pix(g,-6,-1,12,2,"#dfd2ad");
       pix(g,5,-2,3,4,"#f4eee2");
       pix(g,-6,-3,3,6,"#858f91");
       g.restore();
     }
   }
+  // Keep world positions and camera unchanged: only each object's silhouette shrinks.
+  // Foot anchoring and integer translation preserve crisp pixel-art registration.
+  function drawScaledObject(g,x,y,draw,obj){
+    const px=Math.round(x),py=Math.round(y);
+    g.save();
+    g.translate(px,py);
+    g.scale(OBJECT_SCALE,OBJECT_SCALE);
+    g.translate(-px,-py);
+    draw(g,obj);
+    g.restore();
+  }
+
   function drawCrypt(){
     const cx=Math.round(camX),cy=Math.round(camY);
     ctx.fillStyle="#252737";ctx.fillRect(0,0,screenW,screenH);
@@ -1745,9 +1768,9 @@
     ordered.push({y:player.y,type:"knight",o:player},{y:dog.y,type:"dog",o:dog});
     ordered.sort((a,b)=>a.y-b.y);
     for(const a of ordered){
-      if(a.type==="enemy")drawEnemy(ctx,a.o);
-      else if(a.type==="knight")drawKnight(ctx);
-      else drawDog(ctx);
+      if(a.type==="enemy")drawScaledObject(ctx,a.o.x,a.o.y,drawEnemy,a.o);
+      else if(a.type==="knight")drawScaledObject(ctx,player.x,player.y,drawKnight,player);
+      else drawScaledObject(ctx,dog.x,dog.y,drawDog,dog);
     }
     drawBolts(ctx);
     if(groundFog)groundFog.draw(ctx,true);
@@ -1765,9 +1788,9 @@
     ctx.save();ctx.translate(-cx,-cy);
     for(const f of flowers){
       if(f.x<cx-3||f.x>cx+screenW+3||f.y<cy-3||f.y>cy+screenH+3)continue;
-      drawFlower(ctx,f);
+      drawScaledObject(ctx,f.x,f.y,drawFlower,f);
     }
-    drawHome(ctx);
+    drawScaledObject(ctx,HOME.x,HOME.y,drawHome,HOME);
     for(const puddle of mudPuddles){
       ctx.fillStyle="#84735e";ctx.globalAlpha=.65;
       ctx.beginPath();ctx.ellipse(puddle.x,puddle.y,puddle.r,puddle.r*.53,0,0,TAU);ctx.fill();
@@ -1776,7 +1799,9 @@
     }
     for(const rock of stones){
       if(rock.x<cx-9||rock.x>cx+screenW+9||rock.y<cy-9||rock.y>cy+screenH+9)continue;
-      drawStone(ctx,rock.x,rock.y,Math.floor(rock.size),rock.kind);
+      ctx.save();ctx.translate(Math.round(rock.x),Math.round(rock.y));
+      ctx.scale(OBJECT_SCALE,OBJECT_SCALE);ctx.translate(-Math.round(rock.x),-Math.round(rock.y));
+      drawStone(ctx,rock.x,rock.y,Math.floor(rock.size),rock.kind);ctx.restore();
     }
     // Diffuse low-altitude fog under characters; depth wisps render above them.
     if(groundFog)groundFog.draw(ctx,false);
@@ -1806,14 +1831,10 @@
     actors.push({y:dog.y,kind:5,object:dog});
     actors.sort((a,b)=>a.y-b.y);
     for(const a of actors){
-      if(a.kind===0)drawTree(ctx,a.object);
-      else if(a.kind===1)drawSheep(ctx,a.object);
-      else if(a.kind===2)drawKnight(ctx);
-      else if(a.kind===5)drawDog(ctx);
-      else if(a.kind===4)drawObstacle(ctx,a.object);
-      else if(a.kind===6)drawTombEntrance(ctx,a.object);
-      else if(a.kind===7)drawEnemy(ctx,a.object);
-      else drawShrine(ctx,a.object);
+      const draw=a.kind===0?drawTree:a.kind===1?drawSheep:a.kind===2?drawKnight
+        :a.kind===5?drawDog:a.kind===4?drawObstacle:a.kind===6?drawTombEntrance
+        :a.kind===7?drawEnemy:drawShrine;
+      drawScaledObject(ctx,a.object.x,a.object.y,draw,a.object);
     }
     drawMoths(ctx);drawBark(ctx);drawBolts(ctx);
     if(groundFog)groundFog.draw(ctx,true);
@@ -1827,6 +1848,10 @@
     updatePlayer(dt);updateSword(dt);
     if(underground===null)updateSheep(dt);
     updateEnemies(dt);updateParticles(dt);updateActionLabel();
+    if(damageFlash>0){
+      damageFlash=Math.max(0,damageFlash-dt*2.6);
+      damageFeedback.style.opacity=(damageFlash*damageFlash*.96).toFixed(3);
+    }
     if(underground===null && (boss.dead || Math.hypot(player.x-boss.x,player.y-boss.y)>=boss.arena)){
       const region=biomeLabel(activeActor().x,activeActor().y);
       if(areaLabel.textContent!==region)areaLabel.textContent=region;
