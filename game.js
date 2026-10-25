@@ -1342,6 +1342,8 @@
     if(invincible>0||health<=0)return;
     invincible=1.15;
     damageFlash=1;
+    // Show the hit on this exact event, not only on the next animation frame.
+    damageFeedback.style.opacity="1";
     health=Math.max(0,health-amount);healthRefresh();
     addParticles(player.x,player.y-10,"#df9c9c",10);
     if(health>0){
@@ -1476,7 +1478,11 @@
       if(underground!==null){
         e.x=clamp(e.x,51,366);e.y=clamp(e.y,56,246);
       }else if(e.type!=="ghost"&&e.type!=="wisp")collideTrees(e,e.r);
-      if(near && d<e.r*OBJECT_SCALE+8){
+      // Attack reach must be >= the AI's preferred stopping distance,
+      // otherwise bandits, ghosts and golems idle without ever landing hits.
+      const attackReach=e.type==="golem"?28:e.type==="bandit"?23
+        :e.type==="ghost"?18:e.type==="wisp"?21:e.r*OBJECT_SCALE+10;
+      if(near && d<attackReach){
         if(e.type==="slime"||e.type==="wolf"){
           if(e.hitTimer<=0 && e.charge>0){
             e.hitTimer=e.type==="wolf"?1.2:1.4;damagePlayer(1,e.x,e.y);
@@ -1849,8 +1855,10 @@
     if(underground===null)updateSheep(dt);
     updateEnemies(dt);updateParticles(dt);updateActionLabel();
     if(damageFlash>0){
-      damageFlash=Math.max(0,damageFlash-dt*2.6);
-      damageFeedback.style.opacity=(damageFlash*damageFlash*.96).toFixed(3);
+      damageFlash=Math.max(0,damageFlash-dt*1.65);
+      // Very visible on initial contact, then a smooth fade over ~0.6 sec.
+      const intensity=damageFlash>.78?1:Math.pow(damageFlash/.78,1.4);
+      damageFeedback.style.opacity=intensity.toFixed(3);
     }
     if(underground===null && (boss.dead || Math.hypot(player.x-boss.x,player.y-boss.y)>=boss.arena)){
       const region=biomeLabel(activeActor().x,activeActor().y);
@@ -1863,6 +1871,15 @@
     camY=clamp(lerp(camY,focus.y-screenH/2,ease),0,Math.max(0,height-screenH));
     groundFog.update(dt,camX,camY,underground,fogScene,screenW,screenH);
     drawWorld();
+    if(damageFlash>0){
+      // Canvas-level safety net: the whole world flashes, even if the HUD
+      // overlay is obscured by a host browser or compositing issue.
+      ctx.save();
+      ctx.globalAlpha=.46*Math.min(1,damageFlash*1.45);
+      ctx.fillStyle="#ec354c";
+      ctx.fillRect(0,0,screenW,screenH);
+      ctx.restore();
+    }
     requestAnimationFrame(frame);
   }
 
