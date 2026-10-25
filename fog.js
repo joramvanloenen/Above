@@ -32,6 +32,7 @@
       this.previousOy = 0;
       this.steps = 0;
       this.seed = 0;
+      this.volume = window.AboveVolumetricFog ? new window.AboveVolumetricFog(document) : null;
     }
 
     configure(viewW, viewH, camX, camY, room) {
@@ -61,7 +62,7 @@
         this.previousCanvas.width = pixelW;
         this.previousCanvas.height = pixelH;
         this.previousValid = false;
-        this.image = this.ctx.createImageData(pixelW, pixelH);
+        this.image = this.volume && this.volume.ready ? null : this.ctx.createImageData(pixelW, pixelH);
         this.ox = Math.floor(camX / cell) - 4;
         this.oy = Math.floor(camY / cell) - 4;
         this.accumulator = 0;
@@ -289,7 +290,10 @@
     }
 
     renderTexture() {
-      if(!this.image)return;
+      // GPU samples the small fluid grid directly. Avoid expensive per-tick
+      // bicubic CPU reconstruction when height-volume rendering is available.
+      if(this.volume && this.volume.ready)return;
+      if(!this.image)this.image=this.ctx.createImageData(this.canvas.width,this.canvas.height);
       const data=this.image.data;
       const scale=this.renderScale, cols=this.cols, cell=this.cell;
       const pixelW=this.canvas.width,pixelH=this.canvas.height;
@@ -325,6 +329,8 @@
 
     update(dt,camX,camY,room,scene,viewW,viewH) {
       this.clock+=dt;
+      this.viewW=viewW;this.viewH=viewH;
+      this.camX=camX;this.camY=camY;
       this.configure(viewW,viewH,camX,camY,room);
       const shifted=this.rebase(camX,camY);
       this.accumulator=Math.min(this.stepSeconds*2,this.accumulator+dt);
@@ -354,6 +360,8 @@
     // stay nearest-neighbor crisp and HUD remains clear.
     draw(ctx, foreground=false) {
       if(!this.cols)return;
+      if(this.volume && this.volume.ready && this.volume.draw(ctx,this,foreground))return;
+      if(!this.image)this.renderTexture();
       ctx.save();
       ctx.imageSmoothingEnabled=true;
       const strength=foreground?.34:1;
