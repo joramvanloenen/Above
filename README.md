@@ -15,7 +15,19 @@ A little, touchscreen-only, top-down pixel-art adventure about a knight, a loyal
 - **Contextual action:** Approach an unactivated ancient wind chime; the same bottom-right button changes to **USE** for either character.
 - Return **8 sheep** to the home circle to complete the herding objective. Explore for **three hidden chimes**.
 
-Only two buttons are visible: the top character switch and the bottom-right context-sensitive attack / bark / use button. The world, pixel art, tree varieties, animation, and sound effects are generated in the browser, without external art libraries or downloads.
+Only three controls are visible: the top character switch, a compact sword/crossbow switch and the bottom-right context-sensitive action button. The world, pixel art, tree varieties, animation, and sound effects are generated in the browser, without external art libraries or downloads.
+
+## Adventure update
+
+- **Crossbow:** While controlling the knight, tap the **SWORD / BOW** button at the top to switch weapons. **SHOOT** fires a fast bolt. It auto-adjusts slightly toward enemies in front of the knight and has a short cooldown. Switch back to the sword for the original three-hit combo.
+- **Enemies:** Hooded **bandits** patrol woodland clearings; quick **green slimes** lunge at close range. Both chase and harm the knight, have hit points, display damage feedback and can be defeated with the sword or crossbow.
+- **Boss:** The **Mire King** waits in the muddy bog toward the southeastern part of the valley (around world x 1483, y 1040). Its health bar appears when approached. It telegraphs charging attacks and summons more slimes below half health. The finisher and crossbow both damage it.
+- **Tombs:** Three stone crypt entrances lead into distinct underground rooms: the **Crypt of Ash** (827, 1090), **Forgotten Vault** (356, 363) and **Weeping Tomb** (1286, 790). Stand by a stairwell and press **USE** to enter, fight floating **ghosts**, then press **USE** at the interior stairs to leave.
+- **Health:** The knight has five hearts. Enemy contact or attacks remove a heart, with a brief invulnerability period. Losing all hearts returns the pair to the safe starting camp with full health.
+- **Transparent trees:** When the knight or dog walks underneath an overlapping tree crown, that particular tree automatically fades so the character is visible. Unrelated trees remain opaque.
+- **Touch only:** Touch-drag is still the only movement input, plus the small character switch, weapon switch, and one context-sensitive **ATTACK / SHOOT / BARK / USE** button.
+
+The content is implemented with original runtime-drawn pixel art, mobile canvas rendering, generated sound and no third-party dependencies. Boss defeat and killed enemies persist during the current page session; there is not yet a save-game system.
 
 ## Art direction
 
