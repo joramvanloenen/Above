@@ -43,6 +43,16 @@ The overworld is now made up of **five connected, visually distinct biomes** rat
 
 Each area uses its own enemy type: **71 roaming enemies across the five biomes**, plus **15 ghosts underground** and the Mire King boss. The camp and crypt entrances have safer approach zones. The top HUD changes to show the current biome while exploring, and the character-switch, sword, crossbow, sheep, crypt and tree-fading systems continue to work as before.
 
+## Reactive ground fog
+
+- The surface world and all three crypts now have **dynamic low-altitude fog**, strongest in the sinking mire and twilight grove, lighter in the forest and highlands, and thin in the starting meadow.
+- **Knight, dog, sheep, enemies, ghosts and the Mire King** push fog aside as they move. Actor motion injects directional wake and radial displacement into a persistent velocity field; mist flows back into the gaps over time.
+- Uses a **small world-space 2D fluid grid** (semi-Lagrangian density/velocity advection, three Jacobi pressure-projection iterations, density diffusion and ambient wind). It is a stylized *volumetric-looking approximation*, not hardware volumetric ray marching.
+- The simulation runs at a fixed **15 Hz**, independently of drawing frame rate. Its grid scales to the viewport at approximately 12 world pixels per cell and reuses typed arrays, pixel buffers and a single cached canvas.
+- The low-resolution fog texture is bilinearly interpolated into the pixel-art world in **two translucent depth passes**: heavier at ground level below characters, lighter drifting wisps in front. HUD and movement controls stay sharp and legible.
+- The camera can move freely while fog remains **anchored in world coordinates**; simulation cells are preserved when the viewport shifts and reset only on resize or entering/leaving a crypt.
+- Runs in Canvas 2D without WebGL, external shaders, downloadable assets or additional dependencies. Main implementation: `fog.js`.
+
 ## Art direction
 
 A muted yellow-green meadow with tiny patches of wildflowers and grass; sparser clusters of blue-green foliage with jagged plum shadows, five distinct tree families (rounded, conifer, wide-spreading, coppice and willow), varied sizes and warm-violet twilight groves; ivory sheep, warm lavender ruins, and soft displaced tree shadows. Sprites have visible trunks, layered crowns and flattened elliptical ground footprints, implying a camera tilted slightly lower than perfectly overhead. Rendered with a low-resolution canvas and integer pixel snapping for sharp pixels on a mobile phone.
