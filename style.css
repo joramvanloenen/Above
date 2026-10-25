@@ -33,3 +33,13 @@
 #boss-fill{display:block;height:100%;width:100%;background:#a86e61;transition:width .12s}
 #action[data-mode="crossbow"]{background:#555d4c}
 @media(max-width:420px){.topbar{gap:4px;padding-left:13px;padding-right:13px}.wordmark{font-size:23px}.switch-character{min-width:58px;padding:6px 5px}.weapon-switch{min-width:55px;padding:6px 5px}.counter-label,.eyebrow{font-size:7px}.health{left:14px;top:calc(env(safe-area-inset-top,0px) + 75px)}}
+
+/* Flash covers the entire viewport, even when the game canvas is zoomed. */
+#damage-feedback{
+  position:absolute;inset:0;z-index:8;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse at 50% 48%,
+    rgba(255,240,223,.08) 0%,rgba(234,70,79,.24) 48%,
+    rgba(157,24,53,.75) 100%);
+  box-shadow:inset 0 0 0 max(8px,1.6vmin) rgba(240,80,91,.14);
+  will-change:opacity;
+}
