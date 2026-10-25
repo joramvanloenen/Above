@@ -4,31 +4,33 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#a5af75">
-  <meta name="description" content="Above — a quiet pixel-art sheep-herding adventure, made for touch.">
+  <meta name="description" content="Above — a knight and sheepdog pixel-art adventure, made for touch.">
   <title>Above — The Lost Flock</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <main id="game" aria-label="Above, a touchscreen sheep-herding adventure">
-    <canvas id="world" aria-label="Pixel art meadow with a shepherd dog and a flock of sheep"></canvas>
+  <main id="game" aria-label="Above, a touchscreen knight and sheepdog adventure">
+    <canvas id="world" aria-label="Pixel art meadow with a knight, companion sheepdog and a flock of sheep"></canvas>
     <div id="vignette" aria-hidden="true"></div>
     <header class="topbar" aria-live="polite">
       <div class="identity"><span class="eyebrow">A LITTLE ADVENTURE</span><span class="wordmark">ABOVE<span class="star">✳</span></span></div>
+      <button id="switch" class="switch-character" type="button" aria-label="Switch control from knight to dog" title="Switch character">
+        <span class="switch-glyph" aria-hidden="true">⚔ ↔ 🐾</span><span class="switch-text">KNIGHT</span>
+      </button>
       <div class="counter"><span class="counter-label">FLOCK HOME</span><span class="count"><span id="collected">0</span><span class="slash">/</span><span id="total">8</span></span></div>
     </header>
     <section class="notice" id="notice" aria-live="polite">
       <span id="notice-title">THE MEADOW IS WAITING</span>
-      <span id="notice-copy">Drag anywhere to wander. Bark to guide the sheep toward the stone circle.</span>
+      <span id="notice-copy">Guide your knight by dragging. Tap ATTACK for a three-hit sword combo, or switch to your dog to herd sheep.</span>
     </section>
     <div class="bottom-hint" id="hint" aria-hidden="true"><span class="hint-line"></span> TOUCH &amp; DRAG TO MOVE <span class="hint-line"></span></div>
-    <button id="action" type="button" aria-label="Bark or interact" title="Bark / interact">
-      <svg viewBox="0 0 48 48" role="presentation" aria-hidden="true">
-        <path d="M10 29c1-8 5-13 14-13s13 5 14 13c-2 7-7 11-14 11S12 36 10 29Z" fill="currentColor"/>
-        <path d="M12 19 7 7c9 1 13 5 15 11M36 19l5-12c-9 1-13 5-15 11" fill="currentColor"/>
-        <path d="M18 28h1m10 0h1" stroke="#443753" stroke-width="3" stroke-linecap="square"/>
-        <path d="m22 34 2 2 2-2" stroke="#443753" stroke-width="2" fill="none"/>
+    <button id="action" type="button" aria-label="Attack" title="Attack or interact">
+      <svg id="action-icon" viewBox="0 0 48 48" role="presentation" aria-hidden="true">
+        <path d="m33 6 8 8-19 19-7-7L33 6Z" fill="#dfe7e1" stroke="#443753" stroke-width="2"/>
+        <path d="m8 30 9 9M11 37l6-6M16 39l-5 5" stroke="currentColor" stroke-width="5" stroke-linecap="square"/>
+        <path d="m30 11 6 6" stroke="#ffffff" stroke-width="2"/>
       </svg>
-      <span class="button-label">BARK</span>
+      <span class="button-label">ATTACK</span>
     </button>
     <div id="flash" aria-hidden="true"></div>
   </main>
