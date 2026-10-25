@@ -101,7 +101,7 @@
   const enemies=[],bolts=[],tombs=[],mudPuddles=[];
   let underground=null,entranceReturn=null,transitionLock=0;
   let victoryNotice=false;
-  const boss={x:1483,y:1040,type:"boss",hp:48,maxHp:48,r:23,dead:false,
+  const boss={x:1483,y:1040,room:null,type:"boss",hp:48,maxHp:48,r:23,dead:false,
     vx:0,vy:0,phase:0,charge:0,cooldown:2,windup:0,flash:0,hitTimer:0,
     spawnTimer:6,arena:165};
   const tombRect={x:32,y:35,w:354,h:234};
@@ -651,6 +651,9 @@
   }
 
   function tryInteract() {
+    const portal=nearestPortal();
+    if(portal)return usePortal(portal);
+    if(underground!==null)return false;
     const relic=nearestRelic();
     if(!relic)return false;
     relic.found=true;ringGlow=1.1;
@@ -667,18 +670,20 @@
     switchText.textContent=controlled.toUpperCase();
     switchButton.dataset.active=controlled;
     switchButton.setAttribute("aria-label","Switch control to "+(controlled==="knight"?"dog":"knight"));
-    actionIcon.innerHTML=controlled==="dog"?dogIconMarkup:swordIconMarkup;
+    actionIcon.innerHTML=controlled==="dog"?dogIconMarkup:weapon==="crossbow"?bowIconMarkup:swordIconMarkup;
+    weaponButton.disabled=controlled!=="knight";
     showNotice(controlled==="knight"?"THE KNIGHT":"THE SHEEPDOG",
       controlled==="knight"?"Tap quickly to chain three sword strikes. The third is a powerful finisher.":"Herd the flock with a bark. Your knight will follow behind.",3.3);
     updateActionLabel();
   }
 
   function updateActionLabel() {
-    const relic=nearestRelic();
-    let label=controlled==="dog"?"BARK":"ATTACK";
+    const portal=nearestPortal();
+    const relic=underground===null?nearestRelic():null;
+    let label=controlled==="dog"?"BARK":weapon==="crossbow"?"SHOOT":"ATTACK";
     let mode=controlled;
-    if(relic){label="USE";mode="use";}
-    else if(controlled==="knight"){
+    if(relic||portal){label="USE";mode="use";}
+    else if(controlled==="knight"&&weapon==="sword"){
       if(sword.active&&sword.step===2 || !sword.active&&sword.step===2&&time-sword.lastFinish<.62){
         label="FINISH";mode="combo3";
       }else if(sword.active&&sword.step===1 || !sword.active&&sword.step===1&&time-sword.lastFinish<.62){
@@ -687,7 +692,8 @@
     }
     if(actionLabel.textContent!==label)actionLabel.textContent=label;
     if(action.dataset.mode!==mode)action.dataset.mode=mode;
-    const aria=mode==="use"?"Interact":controlled==="dog"?"Bark":"Sword attack";
+    if(controlled==="knight"&&weapon==="crossbow"&&mode!=="use")mode="crossbow";
+    const aria=mode==="use"?"Interact":controlled==="dog"?"Bark":weapon==="crossbow"?"Fire crossbow":"Sword attack";
     if(action.getAttribute("aria-label")!==aria)action.setAttribute("aria-label",aria);
   }
 
@@ -728,6 +734,7 @@
   function doAction() {
     if(tryInteract())return;
     if(controlled==="dog"){bark();return;}
+    if(weapon==="crossbow"){shootCrossbow();return;}
     if(sword.active){
       // An early tap is buffered, including a tap during the recovery frames.
       if(sword.step<3)sword.queued=true;
@@ -761,6 +768,17 @@
       }else{
         addParticles(o.x,o.y-10,"#e2c591",8);
       }
+    }
+    for(const e of enemies.concat([boss])){
+      if(e.dead||!inCurrentRoom(e))continue;
+      const dx=e.x-player.x,dy=e.y-player.y;
+      const dist=Math.hypot(dx,dy*1.12);
+      if(dist>radius+e.r)continue;
+      const theta=Math.atan2(dy,dx);
+      const diff=Math.atan2(Math.sin(theta-sword.facing),Math.cos(theta-sword.facing));
+      if(Math.abs(diff)>cone)continue;
+      hurtEnemy(e,sword.step===3?5:2,dx/Math.max(1,dist),dy/Math.max(1,dist));
+      found=true;
     }
     if(found){
       sound("impact");
@@ -804,7 +822,7 @@
       leader.step+=dt*(leader===dog?16:11)*strength*slow;
       if(Math.random()<dt*3*strength)addParticles(leader.x,leader.y,"#bec08d",1);
     }
-    collideTrees(leader,leader===dog?4:5);
+    if(underground===null)collideTrees(leader,leader===dog?4:5);
 
     const follower=leader===player?dog:player;
     const offset=leader===player?17:21;
@@ -821,14 +839,15 @@
       if(Math.abs(fx)>Math.abs(fy)*.85)follower.face=fx>0?"right":"left";
       else follower.face=fy>0?"down":"up";
       follower.step+=dt*(follower===dog?13:9)*clamp(dist/35,.45,1);
-      collideTrees(follower,follower===dog?4:5);
+      if(underground===null)collideTrees(follower,follower===dog?4:5);
     }
     // Keep companions together if a tight thicket completely blocks their route.
     if(dist>235){
       follower.x=lerp(follower.x,leader.x-Math.cos(leader.angle)*20,dt*3);
       follower.y=lerp(follower.y,leader.y-Math.sin(leader.angle)*20,dt*3);
-      collideTrees(follower,follower===dog?4:5);
+      if(underground===null)collideTrees(follower,follower===dog?4:5);
     }
+    constrainCryptActors();
   }
 
   function updateSheep(dt) {
