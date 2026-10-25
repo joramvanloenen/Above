@@ -120,6 +120,13 @@
         this.lastOx=NaN;this.lastOy=NaN;this.lastRoom="unset";
         this.cols=0;this.rows=0;this.field=null;
         this.ready=true;
+        // The main game canvas is enlarged with nearest-neighbour filtering.
+        // A separate smooth CSS layer prevents that filter from pixelating fog.
+        this.canvas.className="volumetric-fog-layer";
+        this.canvas.setAttribute("aria-hidden","true");
+        const root=document.getElementById("game");
+        if(root && typeof root.insertBefore==="function")
+          root.insertBefore(this.canvas,document.getElementById("vignette"));
         this.canvas.addEventListener("webglcontextlost",e=>{e.preventDefault();this.ready=false;});
       }catch(err){this.error=String(err);this.ready=false;}
     }
@@ -170,7 +177,7 @@
         }
         ctx.save();
         ctx.imageSmoothingEnabled=true;
-        ctx.globalAlpha=foreground?.23:.95;
+        ctx.globalAlpha=foreground?.10:.85;
         ctx.drawImage(this.canvas,
           Math.round(fog.camX),Math.round(fog.camY)+(foreground?-6:0),width,height);
         ctx.restore();
