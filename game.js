@@ -9,8 +9,15 @@
   const actionIcon = document.getElementById("action-icon");
   const actionLabel = action.querySelector(".button-label");
   const switchButton = document.getElementById("switch");
+  const weaponButton = document.getElementById("weapon");
+  const weaponLabel = document.getElementById("weapon-name");
+  const heartsLabel = document.getElementById("hearts");
+  const areaLabel = document.getElementById("area-name");
+  const bossBar = document.getElementById("boss-bar");
+  const bossFill = document.getElementById("boss-fill");
   const switchText = switchButton.querySelector(".switch-text");
   const swordIconMarkup = actionIcon.innerHTML;
+  const bowIconMarkup = '<path d="M7 7 Q37 24 7 41" stroke="currentColor" stroke-width="4" fill="none"/><path d="M7 7 28 24 7 41" stroke="#c9bc96" stroke-width="2" fill="none"/><path d="M14 24h28" stroke="#e5e9e1" stroke-width="4"/><path d="M35 18l7 6-7 6" stroke="#e4d1a7" stroke-width="3" fill="none"/>';
   const dogIconMarkup = '<path d="M10 29c1-8 5-13 14-13s13 5 14 13c-2 7-7 11-14 11S12 36 10 29Z" fill="currentColor"/><path d="M12 19 7 7c9 1 13 5 15 11M36 19l5-12c-9 1-13 5-15 11" fill="currentColor"/><path d="M18 28h1m10 0h1" stroke="#443753" stroke-width="3"/><path d="m22 34 2 2 2-2" stroke="#443753" stroke-width="2" fill="none"/>';
   const collectedLabel = document.getElementById("collected");
   const notice = document.getElementById("notice");
@@ -90,11 +97,20 @@
   const sword={active:false,step:0,elapsed:0,duration:0,queued:false,hit:false,lastFinish:-10};
   const COMBO_DURATIONS=[.29,.33,.53];
   const obstacles=[];
+  let weapon="sword",lastShot=-10,invincible=0,health=5,maxHealth=5;
+  const enemies=[],bolts=[],tombs=[],mudPuddles=[];
+  let underground=null,entranceReturn=null,transitionLock=0;
+  let victoryNotice=false;
+  const boss={x:1483,y:1040,type:"boss",hp:48,maxHp:48,r:23,dead:false,
+    vx:0,vy:0,phase:0,charge:0,cooldown:2,windup:0,flash:0,hitTimer:0,
+    spawnTimer:6,arena:165};
+  const tombRect={x:32,y:35,w:354,h:234};
   let currentInput=null;
   const trees=[],sheep=[],stones=[],moths=[],particles=[],flowers=[],relics=[];
   const crownSprites=[],sheepSprites={};
   let dogSprites={},knightSprites={};
-  let bg=null, audio=null;
+  let bg=null, audio=null,cryptFloor=null;
+  const cryptProps=[];
 
   function resize() {
     screenW = Math.max(105,Math.ceil(innerWidth / SCALE));
