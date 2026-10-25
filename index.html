@@ -17,11 +17,16 @@
       <button id="switch" class="switch-character" type="button" aria-label="Switch control from knight to dog" title="Switch character">
         <span class="switch-glyph" aria-hidden="true">⚔ ↔ 🐾</span><span class="switch-text">KNIGHT</span>
       </button>
+      <button id="weapon" class="weapon-switch" type="button" aria-label="Switch from sword to crossbow" title="Change weapon">
+        <span class="weapon-glyph" aria-hidden="true">⚔</span><span id="weapon-name">SWORD</span>
+      </button>
       <div class="counter"><span class="counter-label">FLOCK HOME</span><span class="count"><span id="collected">0</span><span class="slash">/</span><span id="total">8</span></span></div>
     </header>
+    <div id="health" class="health" aria-live="polite"><span class="health-hearts" id="hearts">♥ ♥ ♥ ♥ ♥</span><span id="area-name">SUNLIT MEADOW</span></div>
+    <div id="boss-bar" class="boss-bar" hidden><span id="boss-title">THE MIRE KING</span><span class="boss-meter"><span id="boss-fill"></span></span></div>
     <section class="notice" id="notice" aria-live="polite">
       <span id="notice-title">THE MEADOW IS WAITING</span>
-      <span id="notice-copy">Guide your knight by dragging. Tap ATTACK for a three-hit sword combo, or switch to your dog to herd sheep.</span>
+      <span id="notice-copy">A crossbow, wandering enemies, hidden tombs and a monster in the marsh await. Switch weapons at the top.</span>
     </section>
     <div class="bottom-hint" id="hint" aria-hidden="true"><span class="hint-line"></span> TOUCH &amp; DRAG TO MOVE <span class="hint-line"></span></div>
     <button id="action" type="button" aria-label="Attack" title="Attack or interact">
