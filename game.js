@@ -120,8 +120,10 @@
   const dog={x:668,y:839,angle:-Math.PI/2,face:"up",step:0,speed:83,moving:0};
   let controlled="knight";
   const activeActor=()=>controlled==="knight"?player:dog;
-  const sword={active:false,step:0,elapsed:0,duration:0,queued:false,hit:false,lastFinish:-10};
-  const COMBO_DURATIONS=[.29,.33,.53];
+  const sword={active:false,step:0,elapsed:0,duration:0,queued:0,hit:false,lastFinish:-10};
+  // Faster attacks, without losing the weight of the finisher.
+  const COMBO_DURATIONS=[.19,.21,.31];
+  const COMBO_GRACE=.48;
   const obstacles=[];
   let weapon="sword",lastShot=-10,invincible=0,health=5,maxHealth=5;
   const enemies=[],bolts=[],tombs=[],mudPuddles=[];
@@ -716,7 +718,7 @@
   function switchCharacter() {
     controlled=controlled==="knight"?"dog":"knight";
     currentInput=null;
-    sword.active=false;sword.step=0;sword.queued=false;
+    sword.active=false;sword.step=0;sword.queued=0;
     switchText.textContent=controlled.toUpperCase();
     switchButton.dataset.active=controlled;
     switchButton.setAttribute("aria-label","Switch control to "+(controlled==="knight"?"dog":"knight"));
@@ -734,9 +736,9 @@
     let mode=controlled;
     if(relic||portal){label="USE";mode="use";}
     else if(controlled==="knight"&&weapon==="sword"){
-      if(sword.active&&sword.step===2 || !sword.active&&sword.step===2&&time-sword.lastFinish<.62){
+      if(sword.active&&sword.step===2 || !sword.active&&sword.step===2&&time-sword.lastFinish<COMBO_GRACE){
         label="FINISH";mode="combo3";
-      }else if(sword.active&&sword.step===1 || !sword.active&&sword.step===1&&time-sword.lastFinish<.62){
+      }else if(sword.active&&sword.step===1 || !sword.active&&sword.step===1&&time-sword.lastFinish<COMBO_GRACE){
         label="COMBO";mode="combo2";
       }
     }
@@ -768,12 +770,12 @@
     }
   }
 
-  function startSwing(step) {
+  function startSwing(step, queued=0) {
     sword.active=true;
     sword.step=step;
     sword.elapsed=0;
     sword.duration=COMBO_DURATIONS[step-1];
-    sword.queued=false;
+    sword.queued=queued;
     sword.hit=false;
     sword.facing=player.angle;
     if(navigator.vibrate)navigator.vibrate(step===3?26:9);
@@ -786,11 +788,11 @@
     if(controlled==="dog"){bark();return;}
     if(weapon==="crossbow"){shootCrossbow();return;}
     if(sword.active){
-      // An early tap is buffered, including a tap during the recovery frames.
-      if(sword.step<3)sword.queued=true;
+      // Preserve multiple quick taps so triple-tapping always reaches the finisher.
+      if(sword.step<3)sword.queued=Math.min(3-sword.step,sword.queued+1);
       return;
     }
-    const canChain=sword.step>0 && sword.step<3 && time-sword.lastFinish<.62;
+    const canChain=sword.step>0 && sword.step<3 && time-sword.lastFinish<COMBO_GRACE;
     startSwing(canChain?sword.step+1:1);
   }
 
@@ -838,18 +840,22 @@
 
   function updateSword(dt) {
     if(!sword.active){
-      if(sword.step>0&&time-sword.lastFinish>.62)sword.step=0;
+      if(sword.step>0&&time-sword.lastFinish>COMBO_GRACE)sword.step=0;
       return;
     }
     sword.elapsed+=dt;
-    if(!sword.hit && sword.elapsed>=sword.duration*.38){
+    if(!sword.hit && sword.elapsed>=sword.duration*.27){
       sword.hit=true;hitSwordTargets();
       if(sword.step===3)addParticles(player.x+Math.cos(sword.facing)*25,
         player.y+Math.sin(sword.facing)*20-8,"#e8dbc6",10);
     }
+    // Skip the tail of recovery when the next combo tap is buffered.
+    if(sword.hit && sword.queued>0 && sword.step<3 && sword.elapsed>=sword.duration*.72){
+      startSwing(sword.step+1,sword.queued-1);
+      return;
+    }
     if(sword.elapsed>=sword.duration){
       sword.active=false;sword.lastFinish=time;
-      if(sword.queued&&sword.step<3)startSwing(sword.step+1);
     }
   }
 
@@ -863,7 +869,7 @@
     }
     leader.moving=strength;
     if(strength>.04){
-      const slow=leader===player&&sword.active?(sword.step===3?.52:.75):1;
+      const slow=leader===player&&sword.active?(sword.step===3?.82:.92):1;
       const speed=leader.speed*strength*slow;
       leader.x+=dx*speed*dt;leader.y+=dy*speed*dt;
       leader.angle=Math.atan2(dy,dx);
@@ -1290,7 +1296,7 @@
     if(!p)return false;
     transitionLock=.9;
     currentInput=null;
-    sword.active=false;sword.step=0;sword.queued=false;
+    sword.active=false;sword.step=0;sword.queued=0;
     bolts.length=0;
     if(p.exit){
       const ret=entranceReturn||{x:684,y:820};
@@ -1313,7 +1319,7 @@
   function toggleWeapon(){
     if(controlled!=="knight")return;
     weapon=weapon==="sword"?"crossbow":"sword";
-    sword.active=false;sword.step=0;sword.queued=false;
+    sword.active=false;sword.step=0;sword.queued=0;
     weaponButton.dataset.weapon=weapon;
     weaponLabel.textContent=weapon==="crossbow"?"BOW":"SWORD";
     weaponButton.querySelector(".weapon-glyph").textContent=weapon==="crossbow"?"➶":"⚔";
@@ -1846,8 +1852,17 @@
     weaponButton.addEventListener("click",e=>{e.stopPropagation();toggleWeapon();});
     switchButton.addEventListener("pointerdown",e=>e.stopPropagation());
     switchButton.addEventListener("click",e=>{e.stopPropagation();switchCharacter();});
-    action.addEventListener("pointerdown",e=>e.stopPropagation());
-    action.addEventListener("click",e=>{e.stopPropagation();doAction();});
+    // Trigger on contact, not release. Retain a keyboard and accessibility fallback.
+    action.addEventListener("pointerdown",e=>{
+      e.stopPropagation();
+      if(e.button!==0)return;
+      if(e.cancelable)e.preventDefault();
+      doAction();
+    });
+    action.addEventListener("click",e=>{
+      e.stopPropagation();
+      if(e.detail===0)doAction(); // Synthetic keyboard / assistive-tech click.
+    });
     action.addEventListener("contextmenu",e=>e.preventDefault());
     document.addEventListener("contextmenu",e=>e.preventDefault());
   }
