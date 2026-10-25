@@ -36,10 +36,12 @@
 
 /* Flash covers the entire viewport, even when the game canvas is zoomed. */
 #damage-feedback{
-  position:absolute;inset:0;z-index:8;pointer-events:none;opacity:0;
-  background:radial-gradient(ellipse at 50% 48%,
-    rgba(255,240,223,.08) 0%,rgba(234,70,79,.24) 48%,
-    rgba(157,24,53,.75) 100%);
-  box-shadow:inset 0 0 0 max(8px,1.6vmin) rgba(240,80,91,.14);
+  position:fixed;inset:0;z-index:50;pointer-events:none;opacity:0;
+  background:
+    radial-gradient(ellipse at 50% 48%,
+      rgba(255,224,205,.45) 0%,rgba(244,64,86,.48) 38%,
+      rgba(174,14,45,.90) 100%),
+    rgba(241,55,74,.26);
+  box-shadow:inset 0 0 0 max(12px,3vmin) rgba(246,90,100,.42);
   will-change:opacity;
 }
