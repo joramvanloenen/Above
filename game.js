@@ -1113,12 +1113,34 @@
     const sprite=crownSprites[t.species*12+(t.twilight?6:0)+t.sprite];
     const sway=Math.sin(time*.65+t.sway)>0.93?1:0;
     const w=Math.round(96*t.size),h=Math.round(108*t.size);
+    // Fade overlapping crown only when the knight or dog walks below it.
+    let fade=1;
+    for(const actor of [player,dog]){
+      const dx=Math.abs(actor.x-t.x),dy=actor.y-t.y;
+      if(dx<37*t.size && dy>-80*t.size && dy<11*t.size){
+        const near=1-clamp(dx/(37*t.size),0,1);
+        fade=Math.min(fade,.27+(.33*(1-near)));
+      }
+    }
+    g.globalAlpha=fade;
     g.drawImage(sprite,Math.round(t.x-w/2)+sway,Math.round(t.y-94*t.size),w,h);
+    g.globalAlpha=1;
   }
   function drawKnight(g){
     const fr=Math.floor(player.step)%2;
     const jolt=sword.active?Math.sin(sword.elapsed/sword.duration*Math.PI)*2:0;
     g.drawImage(knightSprites[player.face+fr],Math.round(player.x-12),Math.round(player.y-25+jolt));
+    if(weapon==="crossbow"){
+      const a=player.angle;
+      // Crossbow silhouette in the knight's hands, aligned with facing.
+      g.save();g.translate(Math.round(player.x),Math.round(player.y-14));
+      g.rotate(a);pix(g,3,-2,14,4,"#694f4e");
+      pix(g,15,-2,2,4,"#e6dfcd");
+      pix(g,11,-8,2,15,"#c8b7a1");
+      pix(g,11,-8,2,2,"#eee3d2");pix(g,11,5,2,2,"#eee3d2");
+      pix(g,5,-1,14,2,"#e5d2a9");
+      g.restore();
+    }
     if(sword.active)drawSword(g);
   }
   function drawDog(g){
@@ -1608,6 +1630,7 @@
   }
 
   function drawWorld(){
+    if(underground!==null){drawCrypt();return;}
     // Snap camera to integer world pixels to preserve crisp, stable nearest-neighbour pixels.
     const cx=Math.round(camX),cy=Math.round(camY);
     ctx.fillStyle=PAL.grass;ctx.fillRect(0,0,screenW,screenH);
@@ -1619,6 +1642,12 @@
       drawFlower(ctx,f);
     }
     drawHome(ctx);
+    for(const puddle of mudPuddles){
+      ctx.fillStyle="#84735e";ctx.globalAlpha=.65;
+      ctx.beginPath();ctx.ellipse(puddle.x,puddle.y,puddle.r,puddle.r*.53,0,0,TAU);ctx.fill();
+      ctx.globalAlpha=1;
+      pix(ctx,puddle.x-4,puddle.y,8,1,"#a59370");
+    }
     for(const rock of stones){
       if(rock.x<cx-9||rock.x>cx+screenW+9||rock.y<cy-9||rock.y>cy+screenH+9)continue;
       drawStone(ctx,rock.x,rock.y,Math.floor(rock.size),rock.kind);
@@ -1639,6 +1668,12 @@
     }
     for(const o of obstacles)if(o.x>cx-35&&o.x<cx+screenW+35&&o.y>cy-35&&o.y<cy+screenH+35)
       actors.push({y:o.y,kind:4,object:o});
+    for(const entrance of tombs)if(entrance.x>cx-50&&entrance.x<cx+screenW+50&&entrance.y>cy-50&&entrance.y<cy+screenH+50)
+      actors.push({y:entrance.y,kind:6,object:entrance});
+    for(const e of enemies)if(!e.dead&&inCurrentRoom(e)&&e.x>cx-50&&e.x<cx+screenW+50&&e.y>cy-50&&e.y<cy+screenH+50)
+      actors.push({y:e.y,kind:7,object:e});
+    if(!boss.dead && boss.x>cx-75&&boss.x<cx+screenW+75&&boss.y>cy-75&&boss.y<cy+screenH+75)
+      actors.push({y:boss.y,kind:7,object:boss});
     actors.push({y:player.y,kind:2,object:player});
     actors.push({y:dog.y,kind:5,object:dog});
     actors.sort((a,b)=>a.y-b.y);
@@ -1648,27 +1683,32 @@
       else if(a.kind===2)drawKnight(ctx);
       else if(a.kind===5)drawDog(ctx);
       else if(a.kind===4)drawObstacle(ctx,a.object);
+      else if(a.kind===6)drawTombEntrance(ctx,a.object);
+      else if(a.kind===7)drawEnemy(ctx,a.object);
       else drawShrine(ctx,a.object);
     }
-    drawMoths(ctx);drawBark(ctx);drawParticles(ctx);
+    drawMoths(ctx);drawBark(ctx);drawBolts(ctx);drawParticles(ctx);
     ctx.restore();
   }
 
   function frame(timestamp){
     if(!last)last=timestamp;
     const dt=Math.min(.05,(timestamp-last)/1000);last=timestamp;time+=dt;
-    updatePlayer(dt);updateSword(dt);updateSheep(dt);updateParticles(dt);updateActionLabel();
+    updatePlayer(dt);updateSword(dt);
+    if(underground===null)updateSheep(dt);
+    updateEnemies(dt);updateParticles(dt);updateActionLabel();
     const ease=1-Math.exp(-dt*4.5);
     const focus=activeActor();
-    camX=clamp(lerp(camX,focus.x-screenW/2,ease),0,Math.max(0,W-screenW));
-    camY=clamp(lerp(camY,focus.y-screenH/2,ease),0,Math.max(0,H-screenH));
+    const width=underground===null?W:420,height=underground===null?H:300;
+    camX=clamp(lerp(camX,focus.x-screenW/2,ease),0,Math.max(0,width-screenW));
+    camY=clamp(lerp(camY,focus.y-screenH/2,ease),0,Math.max(0,height-screenH));
     drawWorld();
     requestAnimationFrame(frame);
   }
 
   function setupInput(){
     game.addEventListener("pointerdown",e=>{
-      if(e.target.closest("#action")||e.target.closest("#switch"))return;
+      if(e.target.closest("#action")||e.target.closest("#switch")||e.target.closest("#weapon"))return;
       if(currentInput)return;
       currentInput={id:e.pointerId,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY};
       if(e.cancelable)e.preventDefault();
@@ -1684,6 +1724,8 @@
     window.addEventListener("pointerup",release);
     window.addEventListener("pointercancel",release);
     window.addEventListener("blur",()=>currentInput=null);
+    weaponButton.addEventListener("pointerdown",e=>e.stopPropagation());
+    weaponButton.addEventListener("click",e=>{e.stopPropagation();toggleWeapon();});
     switchButton.addEventListener("pointerdown",e=>e.stopPropagation());
     switchButton.addEventListener("click",e=>{e.stopPropagation();switchCharacter();});
     action.addEventListener("pointerdown",e=>e.stopPropagation());
@@ -1695,7 +1737,8 @@
   function init(){
     resize();
     buildTreeSprites();buildSheepSprites();buildDogSprites();buildKnightSprites();
-    generateTrees();makeGround();spawnLife();spawnTargets();
+    generateTrees();makeGround();spawnLife();spawnTargets();spawnAdventure();
+    healthRefresh();weaponButton.dataset.weapon="sword";
     setupInput();
     window.addEventListener("resize",resize);
     window.addEventListener("orientationchange",resize);
