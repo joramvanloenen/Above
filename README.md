@@ -53,6 +53,14 @@ Each area uses its own enemy type: **71 roaming enemies across the five biomes**
 - The camera can move freely while fog remains **anchored in world coordinates**; simulation cells are preserved when the viewport shifts and reset only on resize or entering/leaving a crypt.
 - Runs in Canvas 2D without WebGL, external shaders, downloadable assets or additional dependencies. Main implementation: `fog.js`.
 
+## Fog polish, hit feedback and object scale
+
+- The fog has **higher density**, strongest in the swamp and twilight grove, and uses a **finer ~7-world-pixel simulation grid** at common mobile viewport sizes, still updated at only **15 Hz**.
+- **Flicker correction:** camera grid rebases immediately refresh the aligned density texture. Two persistent fog canvases are smoothly blended between fixed simulation ticks to avoid the visible jump when a new low-resolution density frame arrives. No per-frame canvas allocation.
+- A short-lived **full-screen crimson damage vignette** flashes whenever an enemy damages the knight, then fades without blocking input.
+- **All foreground world sprites and props render at half their former size**, around their existing positions: knight, sheepdog, sheep, enemies, boss, trees, flowers, stones, shrines, entrances, training targets and crypt furniture. The world map and camera coordinates are not zoomed or rescaled. Collision radii and melee reach are adjusted for smaller physical sprites.
+- Terrain surfaces, masonry floors and landscape landmarks remain full-size world geometry, so the scene retains its overall layout.
+
 ## Art direction
 
 A muted yellow-green meadow with tiny patches of wildflowers and grass; sparser clusters of blue-green foliage with jagged plum shadows, five distinct tree families (rounded, conifer, wide-spreading, coppice and willow), varied sizes and warm-violet twilight groves; ivory sheep, warm lavender ruins, and soft displaced tree shadows. Sprites have visible trunks, layered crowns and flattened elliptical ground footprints, implying a camera tilted slightly lower than perfectly overhead. Rendered with a low-resolution canvas and integer pixel snapping for sharp pixels on a mobile phone.
