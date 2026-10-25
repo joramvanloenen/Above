@@ -29,9 +29,23 @@ Only three controls are visible: the top character switch, a compact sword/cross
 
 The content is implemented with original runtime-drawn pixel art, mobile canvas rendering, generated sound and no third-party dependencies. Boss defeat and killed enemies persist during the current page session; there is not yet a save-game system.
 
+## Biomes and encounters
+
+The overworld is now made up of **five connected, visually distinct biomes** rather than uniformly dense forest. Tree density is substantially reduced overall, with groves concentrated in woodland regions so trails and enemies stay visible.
+
+| Biome | Ground and vegetation | Native enemy | Combat style |
+| --- | --- | --- | --- |
+| **Sunlit Meadow** | Open yellow-green grass, wildflowers and a few solitary trees | **Bandits** | Armed patrols that pursue and strike |
+| **Old Growth Woods** | Mossy green ground and clustered trees | **Wolves** | Fast pursuit followed by sudden pounces |
+| **Sinking Mire** | Wet olive ground, reeds and mud | **Green slimes** | Hopping lunges; the Mire King rules this region |
+| **Stony Highlands** | Pale stony terrain and scattered rocks | **Stone golems** | Slow heavy attacks that deal two hearts of damage |
+| **Twilight Grove** | Muted violet soil and sparse purple woodland | **Wandering wisps** | Floating, weaving pursuit |
+
+Each area uses its own enemy type: **71 roaming enemies across the five biomes**, plus **15 ghosts underground** and the Mire King boss. The camp and crypt entrances have safer approach zones. The top HUD changes to show the current biome while exploring, and the character-switch, sword, crossbow, sheep, crypt and tree-fading systems continue to work as before.
+
 ## Art direction
 
-A muted yellow-green meadow with tiny patches of wildflowers and grass; thick clumps of blue-green foliage with jagged plum shadows, five distinct tree families (rounded, conifer, wide-spreading, coppice and willow), varied sizes and warm-violet twilight groves; ivory sheep, warm lavender ruins, and soft displaced tree shadows. Sprites have visible trunks, layered crowns and flattened elliptical ground footprints, implying a camera tilted slightly lower than perfectly overhead. Rendered with a low-resolution canvas and integer pixel snapping for sharp pixels on a mobile phone.
+A muted yellow-green meadow with tiny patches of wildflowers and grass; sparser clusters of blue-green foliage with jagged plum shadows, five distinct tree families (rounded, conifer, wide-spreading, coppice and willow), varied sizes and warm-violet twilight groves; ivory sheep, warm lavender ruins, and soft displaced tree shadows. Sprites have visible trunks, layered crowns and flattened elliptical ground footprints, implying a camera tilted slightly lower than perfectly overhead. Rendered with a low-resolution canvas and integer pixel snapping for sharp pixels on a mobile phone.
 
 ## Architecture
 
