@@ -143,7 +143,7 @@
   let bg=null, audio=null,cryptFloor=null;
   const cryptProps=[];
   // Stable scene object: no allocations in the per-frame fluid update.
-  const fogScene={player,dog,sheep,enemies,boss};
+  const fogScene={player,dog,sheep,enemies,boss,trees,tombs,obstacles,relics};
   let groundFog=null;
 
   function resize() {
@@ -1871,6 +1871,9 @@
     camY=clamp(lerp(camY,focus.y-screenH/2,ease),0,Math.max(0,height-screenH));
     groundFog.update(dt,camX,camY,underground,fogScene,screenW,screenH);
     drawWorld();
+    // One opaque, depth-aware compositing pass: scene colour is attenuated
+    // and fog lighting is integrated. DOM HUD remains outside the canvas.
+    groundFog.composite(ctx,canvas,fogScene);
     if(damageFlash>0){
       // Canvas-level safety net: the whole world flashes, even if the HUD
       // overlay is obscured by a host browser or compositing issue.
