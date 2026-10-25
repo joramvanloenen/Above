@@ -18,3 +18,18 @@
  .switch-glyph {font-size:13px;}
  .counter-label,.eyebrow {font-size:8px;}
 }
+
+/* Adventure additions: keep the touchscreen viewport clean and controls compact. */
+.weapon-switch{pointer-events:auto;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:65px;padding:6px 9px 7px;border:1px solid rgba(242,234,212,.8);border-radius:16px;background:rgba(55,68,81,.9);color:#efe8d0;font:800 9px ui-monospace,monospace;letter-spacing:.07em;box-shadow:0 3px 0 rgba(43,40,58,.55);cursor:pointer;touch-action:manipulation;}
+.weapon-switch:active{transform:translateY(2px);}
+.weapon-switch[disabled]{opacity:.46;cursor:default}
+.weapon-switch[data-weapon="crossbow"]{background:#5d614c}
+.weapon-glyph{font-size:17px;line-height:1.1;height:17px}
+.health{position:absolute;top:calc(env(safe-area-inset-top,0px) + 81px);left:calc(env(safe-area-inset-left,0px) + 24px);pointer-events:none;display:flex;flex-direction:column;gap:4px;font-size:9px;font-weight:800;letter-spacing:.08em;color:#f7edd4;text-shadow:0 2px 2px #45405b}
+.health-hearts{font-size:15px;letter-spacing:2px;color:#e6a7a1}
+.boss-bar{position:absolute;left:15%;right:15%;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;flex-direction:column;align-items:center;gap:5px;pointer-events:none;font-size:10px;font-weight:900;letter-spacing:.15em;text-shadow:0 2px 3px #241e28}
+.boss-bar[hidden]{display:none}
+.boss-meter{width:100%;height:8px;border:2px solid #e6d2b6;background:#413746}
+#boss-fill{display:block;height:100%;width:100%;background:#a86e61;transition:width .12s}
+#action[data-mode="crossbow"]{background:#555d4c}
+@media(max-width:420px){.topbar{gap:4px;padding-left:13px;padding-right:13px}.wordmark{font-size:23px}.switch-character{min-width:58px;padding:6px 5px}.weapon-switch{min-width:55px;padding:6px 5px}.counter-label,.eyebrow{font-size:7px}.health{left:14px;top:calc(env(safe-area-inset-top,0px) + 75px)}}
