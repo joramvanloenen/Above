@@ -1,18 +1,21 @@
 # Above
 
-A little, touchscreen-only, top-down pixel-art adventure about a sheepdog, the forest, and a flock that has wandered away.
+A little, touchscreen-only, top-down pixel-art adventure about a knight, a loyal sheepdog, the forest, and a flock that has wandered away.
 
 **[Play on GitHub Pages](https://joramvanloenen.github.io/Above/)** (once GitHub Pages is enabled for the repository).
 
 ## Playing
 
-- **Touch and drag anywhere** to walk in that direction. Movement uses an invisible analogue joystick with its origin under your finger; lift your finger to stop.
-- **Tap BARK** to bark. Nearby sheep bolt away from a bark, so get behind them and guide them toward the pale stone circle. Sheep also flee from a dog that gets too close, and settle back down once the danger passes.
-- Sheep graze, watch approaching movement, ramble, occasionally dart about, startle each other, flee and regroup. The dog runs much faster than in the initial prototype.
-- Bring **8 sheep** to the home circle to complete the first objective.
-- Explore the woodland for **three old wind chimes**. Bark close to them to wake them.
+- **You start as the knight**, with the dog following along as an autonomous companion.
+- **Touch and drag anywhere** to move the selected character. There is no visible movement pad.
+- **Tap the character switch at the top** to control the dog; the knight then follows you instead.
+- **Knight ATTACK:** Tap to swing your sword. Tap again during the swing (or within 0.62 seconds after it ends) to chain into a second, reverse-direction swing. Tap again quickly for a **third, wider, more powerful finisher**. Taps during a swing are buffered.
+- **Targets:** Bramble patches have 3 HP; the first two strikes deal 1 damage each, while the third deals 3 and breaks a bramble instantly. Straw dummies can be hit repeatedly without disappearing. Sheep cannot be hurt by the sword.
+- **Dog BARK:** Startle nearby sheep and steer them toward the stone circle. Sheep can also flee from a dog approaching too closely.
+- **Contextual action:** Approach an unactivated ancient wind chime; the same bottom-right button changes to **USE** for either character.
+- Return **8 sheep** to the home circle to complete the herding objective. Explore for **three hidden chimes**.
 
-There are no on-screen directional controls, keyboard requirements, asset downloads, accounts, ads, analytics, or external libraries. The world, pixel-art sprites, foliage, animation, and sound effects are procedurally generated in the browser.
+Only two buttons are visible: the top character switch and the bottom-right context-sensitive attack / bark / use button. The world, pixel art, tree varieties, animation, and sound effects are generated in the browser, without external art libraries or downloads.
 
 ## Art direction
 
@@ -22,7 +25,7 @@ A muted yellow-green meadow with tiny patches of wildflowers and grass; thick cl
 
 - index.html — full-screen game canvas and minimal overlay (only one action button)
 - style.css — touch-safe mobile layout with safe-area insets
-- game.js — rendering, procedural environment, touch input, flock steering, objectives, generated art, and Web Audio sound
+- game.js — rendering, procedural environment, touch input, flock steering, objectives, generated art, and Web Audio sound, knight/dog follower AI, contextual interactions and three-strike sword combat
 - .github/workflows/pages.yml — static deployment to GitHub Pages
 
 Simply open index.html in a browser to run locally. No build, bundler, or server is required.
