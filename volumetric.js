@@ -10,78 +10,20 @@
       vUv = aPos * 0.5 + 0.5;
       gl_Position = vec4(aPos,0.,1.);
     }`;
-  const FRAG = `
-    precision highp float;
-    varying vec2 vUv;
-    uniform sampler2D uDensity;
-    uniform vec2 uCamera,uView,uGridOrigin,uGridSize;
-    uniform float uCell,uTime,uCrypt;
-
-    float hash31(vec3 p) {
-      p = fract(p * .1031);
-      p += dot(p,p.yzx+33.33);
-      return fract((p.x+p.y)*p.z);
-    }
-    float noise3(vec3 p) {
-      vec3 i=floor(p),f=fract(p);
-      f=f*f*(3.-2.*f);
-      float a=hash31(i);
-      float b=hash31(i+vec3(1.,0.,0.));
-      float c=hash31(i+vec3(0.,1.,0.));
-      float d=hash31(i+vec3(1.,1.,0.));
-      float e=hash31(i+vec3(0.,0.,1.));
-      float f1=hash31(i+vec3(1.,0.,1.));
-      float g=hash31(i+vec3(0.,1.,1.));
-      float h=hash31(i+vec3(1.,1.,1.));
-      return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y),
-                 mix(mix(e,f1,f.x),mix(g,h,f.x),f.y),f.z);
-    }
-    void main() {
-      vec2 ground=uCamera+vec2(vUv.x*uView.x,(1.-vUv.y)*uView.y);
-      float transparency=1.;
-      vec3 scatter=vec3(0.);
-      const int SLICES=9;
-      const float HEIGHT=30.0;
-      for(int i=0;i<SLICES;i++) {
-        float z=(float(i)+.5)*(HEIGHT/float(SLICES));
-        // Depth-parallax: each height samples a distinct 3D position.
-        vec2 world=ground+vec2(-z*.24,z*.79);
-        vec2 uv=(world/uCell-uGridOrigin)/uGridSize;
-        float flow=texture2D(uDensity,clamp(uv,vec2(.001),vec2(.999))).r;
-        vec3 q=vec3(world*.035+vec2(uTime*.045,-uTime*.023),z*.073+uTime*.012);
-        float large=noise3(q*.72);
-        float detail=noise3(q*1.87+vec3(8.1,13.8,2.4));
-        float cloud=smoothstep(.27,.67,large*.71+detail*.29);
-        // Density is strong at ground and tapers over 30 world units.
-        float vertical=exp(-z*.067)*(1.-smoothstep(HEIGHT-7.,HEIGHT,z));
-        float density=flow*(.10+cloud*1.8)*vertical;
-        // Low-cost directional self-shadow from an upstream 3D sample.
-        float shadowNoise=noise3(q*.72+vec3(-.32,-.33,.57));
-        float sun=exp(-1.8*max(0.,shadowNoise-.34));
-        float edge=clamp((large-shadowNoise)*1.8+.5,.05,1.);
-        float light=clamp(sun*.67+edge*.44,.17,1.15);
-        vec3 dark=uCrypt>.5?vec3(.24,.38,.43):vec3(.34,.49,.52);
-        vec3 warm=uCrypt>.5?vec3(.67,.82,.83):vec3(1.00,.94,.78);
-        vec3 color=mix(dark,warm,light);
-        float absorption=1.-exp(-density*.27*(HEIGHT/float(SLICES)));
-        float amount=transparency*absorption;
-        scatter+=amount*color;
-        transparency*=1.-absorption;
-      }
-      float opacity=clamp(1.-transparency,0.,.92);
-      gl_FragColor=vec4(scatter/max(.0001,opacity),opacity);
-    }`;
+  const FRAG = "\nprecision highp float;\nvarying vec2 vUv;\nuniform sampler2D uScene,uDensity,uHeight;\nuniform vec2 uCamera,uView,uGridOrigin,uGridSize;\nuniform float uCell,uTime,uCrypt;\nfloat hash31(vec3 p) {\n  p=fract(p*.1031);p+=dot(p,p.yzx+33.33);\n  return fract((p.x+p.y)*p.z);\n}\nfloat noise3(vec3 p) {\n  vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);\n  float a=hash31(i),b=hash31(i+vec3(1.,0.,0.));\n  float c=hash31(i+vec3(0.,1.,0.)),d=hash31(i+vec3(1.,1.,0.));\n  float e=hash31(i+vec3(0.,0.,1.)),g=hash31(i+vec3(1.,0.,1.));\n  float h=hash31(i+vec3(0.,1.,1.)),j=hash31(i+vec3(1.,1.,1.));\n  return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y),\n             mix(mix(e,g,f.x),mix(h,j,f.x),f.y),f.z);\n}\nvec3 linearize(vec3 v){return pow(max(v,vec3(0.)),vec3(2.2));}\nvec3 delinearize(vec3 v){return pow(max(v,vec3(0.)),vec3(1./2.2));}\nvoid main(){\n  vec3 original=linearize(texture2D(uScene,vUv).rgb);\n  float objectHeight=texture2D(uHeight,vUv).r*38.0;\n  vec2 ground=uCamera+vec2(vUv.x*uView.x,(1.-vUv.y)*uView.y);\n  vec3 scattering=vec3(0.);\n  float transmission=1.0;\n  const int STEPS=12;\n  const float HEIGHT=38.0;\n  const float DS=HEIGHT/float(STEPS);\n  // March from camera to object surface / ground. Visible tall objects\n  // interrupt the fog ray so their upper silhouette rises above the mist.\n  for(int i=0;i<STEPS;i++){\n    float z=HEIGHT-(float(i)+.5)*DS;\n    float visible=smoothstep(objectHeight-1.5,objectHeight+1.5,z);\n    vec2 world=ground+vec2(-z*.26,z*.62);\n    vec2 uv=(world/uCell-uGridOrigin+vec2(.5))/uGridSize;\n    float flow=texture2D(uDensity,vec2(clamp(uv.x,.001,.999),\n                                       1.-clamp(uv.y,.001,.999))).r;\n    vec3 q=vec3(world*.027+vec2(uTime*.050,-uTime*.023),\n                z*.070+uTime*.011);\n    float body=noise3(q*.82);\n    float detail=noise3(q*1.83+vec3(6.4,14.1,2.3));\n    float billow=smoothstep(.31,.63,body*.78+detail*.22);\n    float vertical=exp(-z*.074)*(1.-smoothstep(HEIGHT-8.,HEIGHT,z));\n    float extinction=flow*(.24+1.50*billow)*vertical*visible;\n    float upstream=noise3(q*.82+vec3(-.42,-.35,.55));\n    float sun=exp(-2.2*max(0.,upstream-.33));\n    float rim=clamp((body-upstream)*1.8+.45,0.,1.);\n    float light=clamp(.22+.57*sun+.24*rim,.18,.97);\n    vec3 ambient=uCrypt>.5?vec3(.19,.28,.36):vec3(.23,.34,.39);\n    vec3 daylight=uCrypt>.5?vec3(.56,.73,.79):vec3(.85,.83,.69);\n    vec3 source=mix(ambient,daylight,light);\n    float stepT=exp(-extinction*DS*.092);\n    scattering+=transmission*(1.-stepT)*source;\n    transmission*=stepT;\n  }\n  // Energy-conserving compositing: output = scene * transmittance + scattering.\n  gl_FragColor=vec4(delinearize(original*transmission+scattering),1.);\n}";
 
   class AboveVolumetricFog {
     constructor(document) {
       this.canvas=document.createElement("canvas");
+      this.maskCanvas=document.createElement("canvas");
+      this.maskCtx=this.maskCanvas.getContext("2d");
       this.ready=false;
       try {
         const gl=this.canvas.getContext("webgl",{
-          alpha:true,premultipliedAlpha:true,antialias:false,
+          alpha:false,antialias:false,
           depth:false,stencil:false,preserveDrawingBuffer:true,
           powerPreference:"low-power"
-        })||this.canvas.getContext("experimental-webgl",{alpha:true,preserveDrawingBuffer:true});
+        })||this.canvas.getContext("experimental-webgl",{alpha:false,preserveDrawingBuffer:true});
         if(!gl)return;
         this.gl=gl;
         const compile=(type,code)=>{
@@ -105,84 +47,135 @@
         gl.enableVertexAttribArray(attr);
         gl.vertexAttribPointer(attr,2,gl.FLOAT,false,0,0);
         this.uniforms={};
-        for(const name of ["uDensity","uCamera","uView","uGridOrigin","uGridSize","uCell","uTime","uCrypt"])
+        for(const name of ["uScene","uDensity","uHeight","uCamera","uView","uGridOrigin","uGridSize","uCell","uTime","uCrypt"])
           this.uniforms[name]=gl.getUniformLocation(program,name);
-        this.texture=gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D,this.texture);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-        gl.uniform1i(this.uniforms.uDensity,0);
+        this.textures=[];
+        for(let i=0;i<3;i++){
+          const tex=gl.createTexture();
+          this.textures.push(tex);
+          gl.activeTexture(gl.TEXTURE0+i);
+          gl.bindTexture(gl.TEXTURE_2D,tex);
+          gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+        }
+        gl.uniform1i(this.uniforms.uScene,0);
+        gl.uniform1i(this.uniforms.uDensity,1);
+        gl.uniform1i(this.uniforms.uHeight,2);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
-        this.lastStep=-1;
-        this.lastOx=NaN;this.lastOy=NaN;this.lastRoom="unset";
+        this.lastStep=-1;this.lastOx=NaN;this.lastOy=NaN;this.lastRoom="unset";
         this.cols=0;this.rows=0;this.field=null;
         this.ready=true;
-        // The main game canvas is enlarged with nearest-neighbour filtering.
-        // A separate smooth CSS layer prevents that filter from pixelating fog.
-        this.canvas.className="volumetric-fog-layer";
-        this.canvas.setAttribute("aria-hidden","true");
-        const root=document.getElementById("game");
-        if(root && typeof root.insertBefore==="function")
-          root.insertBefore(this.canvas,document.getElementById("vignette"));
         this.canvas.addEventListener("webglcontextlost",e=>{e.preventDefault();this.ready=false;});
       }catch(err){this.error=String(err);this.ready=false;}
     }
 
-    draw(ctx,fog,foreground) {
+    // Build a height proxy for visible silhouettes, used to stop the
+    // atmospheric ray at a surface instead of fogging every sprite equally.
+    buildHeightMask(fog,scene){
+      const w=fog.viewW,h=fog.viewH,g=this.maskCtx;
+      if(this.maskCanvas.width!==w||this.maskCanvas.height!==h){
+        this.maskCanvas.width=w;this.maskCanvas.height=h;
+      }
+      g.fillStyle="#000";g.fillRect(0,0,w,h);
+      const cx=Math.round(fog.camX),cy=Math.round(fog.camY);
+      const ellipse=(px,py,rx,ry,ht)=>{
+        const x=px-cx,y=py-cy;
+        if(x+rx<0||y+ry<0||x-rx>w||y-ry>h)return;
+        const shade=Math.round(255*Math.min(1,ht/38));
+        g.fillStyle="rgb("+shade+","+shade+","+shade+")";
+        g.beginPath();g.ellipse(x,y,Math.max(1,rx),Math.max(1,ry),0,0,Math.PI*2);g.fill();
+      };
+      const rect=(px,py,rx,ry,ht)=>{
+        const x=px-cx,y=py-cy;
+        if(x+rx<0||y+ry<0||x-rx>w||y-ry>h)return;
+        const shade=Math.round(255*Math.min(1,ht/38));
+        g.fillStyle="rgb("+shade+","+shade+","+shade+")";
+        g.fillRect(Math.round(x-rx),Math.round(y-ry),Math.max(1,rx*2),Math.max(1,ry*2));
+      };
+      if(fog.room===null){
+        for(const t of scene.trees){
+          const scale=t.size*.5;
+          ellipse(t.x,t.y-35*scale,45*scale,39*scale,32);
+          rect(t.x,t.y-8*scale,3*scale,14*scale,13);
+        }
+        for(const t of scene.tombs)rect(t.x,t.y-7,11,9,17);
+        for(const o of scene.obstacles)if(!o.broken)
+          ellipse(o.x,o.y-5,7,6,o.type==="dummy"?14:8);
+        for(const r of scene.relics)rect(r.x,r.y-4,3,7,15);
+        for(const sheep of scene.sheep)ellipse(sheep.x,sheep.y-5,5,5,9);
+      }
+      ellipse(scene.player.x,scene.player.y-7,6,8,18);
+      ellipse(scene.dog.x,scene.dog.y-5,5,5,11);
+      for(const e of scene.enemies){
+        if(e.dead||e.room!==fog.room)continue;
+        const sc=e.type==="golem"?1.5:1;
+        ellipse(e.x,e.y-7*sc,6.5*sc,8*sc,e.type==="golem"?23:e.type==="ghost"?16:14);
+      }
+      if(fog.room===null&&scene.boss&&!scene.boss.dead)
+        ellipse(scene.boss.x,scene.boss.y-13,20,17,30);
+    }
+
+    // Opaque postprocess. Render once AFTER terrain, actors and particles;
+    // write scene radiance * Beer-Lambert T + directional in-scattering.
+    composite(ctx,sourceCanvas,fog,scene){
       if(!this.ready)return false;
       const gl=this.gl;
-      try {
-        const width=fog.viewW,height=fog.viewH;
-        if(!width||!height)return false;
-        if(!foreground) {
-          const w=Math.max(1,Math.ceil(width*.85));
-          const h=Math.max(1,Math.ceil(height*.85));
-          if(this.canvas.width!==w||this.canvas.height!==h){
-            this.canvas.width=w;this.canvas.height=h;
-          }
-          gl.viewport(0,0,w,h);
-          gl.useProgram(this.program);
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D,this.texture);
-          if(this.cols!==fog.cols||this.rows!==fog.rows){
-            this.cols=fog.cols;this.rows=fog.rows;
-            this.field=new Uint8Array(this.cols*this.rows);
-            this.lastStep=-1;
-          }
-          if(this.lastStep!==fog.steps||this.lastOx!==fog.ox||
-             this.lastOy!==fog.oy||this.lastRoom!==fog.room){
-            for(let i=0;i<this.field.length;i++)
-              this.field[i]=Math.max(0,Math.min(255,Math.round(fog.d[i]*255)));
-            gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,this.cols,this.rows,
-              0,gl.LUMINANCE,gl.UNSIGNED_BYTE,this.field);
-            this.lastStep=fog.steps;this.lastOx=fog.ox;
-            this.lastOy=fog.oy;this.lastRoom=fog.room;
-          }
-          const u=this.uniforms;
-          gl.uniform2f(u.uCamera,fog.camX,fog.camY);
-          gl.uniform2f(u.uView,width,height);
-          gl.uniform2f(u.uGridOrigin,fog.ox,fog.oy);
-          gl.uniform2f(u.uGridSize,fog.cols,fog.rows);
-          gl.uniform1f(u.uCell,fog.cell);
-          gl.uniform1f(u.uTime,fog.clock);
-          gl.uniform1f(u.uCrypt,fog.room===null?0:1);
-          gl.disable(gl.DEPTH_TEST);
-          gl.disable(gl.BLEND);
-          gl.clearColor(0,0,0,0);
-          gl.clear(gl.COLOR_BUFFER_BIT);
-          gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+      try{
+        const w=fog.viewW|0,h=fog.viewH|0;
+        if(w<1||h<1)return false;
+        if(this.canvas.width!==w||this.canvas.height!==h){
+          this.canvas.width=w;this.canvas.height=h;
         }
+        this.buildHeightMask(fog,scene);
+        gl.viewport(0,0,w,h);
+        gl.useProgram(this.program);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D,this.textures[0]);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,sourceCanvas);
+        if(this.cols!==fog.cols||this.rows!==fog.rows){
+          this.cols=fog.cols;this.rows=fog.rows;
+          this.field=new Uint8Array(this.cols*this.rows);
+          this.lastStep=-1;
+        }
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D,this.textures[1]);
+        if(this.lastStep!==fog.steps||this.lastOx!==fog.ox||
+           this.lastOy!==fog.oy||this.lastRoom!==fog.room){
+          for(let i=0;i<this.field.length;i++)
+            this.field[i]=Math.round(Math.max(0,Math.min(1,fog.d[i]))*255);
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+          gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,this.cols,this.rows,
+            0,gl.LUMINANCE,gl.UNSIGNED_BYTE,this.field);
+          this.lastStep=fog.steps;this.lastOx=fog.ox;
+          this.lastOy=fog.oy;this.lastRoom=fog.room;
+        }
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D,this.textures[2]);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,this.maskCanvas);
+        const u=this.uniforms;
+        gl.uniform2f(u.uCamera,Math.round(fog.camX),Math.round(fog.camY));
+        gl.uniform2f(u.uView,w,h);
+        gl.uniform2f(u.uGridOrigin,fog.ox,fog.oy);
+        gl.uniform2f(u.uGridSize,fog.cols,fog.rows);
+        gl.uniform1f(u.uCell,fog.cell);
+        gl.uniform1f(u.uTime,fog.clock);
+        gl.uniform1f(u.uCrypt,fog.room===null?0:1);
+        gl.disable(gl.BLEND);
+        gl.disable(gl.DEPTH_TEST);
+        gl.clearColor(0,0,0,1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
         ctx.save();
-        ctx.imageSmoothingEnabled=true;
-        ctx.globalAlpha=foreground?.10:.85;
-        ctx.drawImage(this.canvas,
-          Math.round(fog.camX),Math.round(fog.camY)+(foreground?-6:0),width,height);
+        ctx.globalAlpha=1;
+        ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(this.canvas,0,0,w,h);
         ctx.restore();
         return true;
-      } catch(err) {this.error=String(err);this.ready=false;return false;}
+      }catch(err){this.error=String(err);this.ready=false;return false;}
     }
   }
   window.AboveVolumetricFog=AboveVolumetricFog;
