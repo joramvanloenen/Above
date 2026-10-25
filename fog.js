@@ -21,13 +21,19 @@
       this.stepSeconds = 1 / 15;
       this.canvas = document.createElement("canvas");
       this.ctx = this.canvas.getContext("2d", {willReadFrequently: false});
+      // Previous density texture crossfades into each 15Hz fluid step.
+      this.previousCanvas = document.createElement("canvas");
+      this.previousCtx = this.previousCanvas.getContext("2d");
+      this.previousValid = false;
+      this.previousOx = 0;
+      this.previousOy = 0;
       this.steps = 0;
       this.seed = 0;
     }
 
     configure(viewW, viewH, camX, camY, room) {
       // Capped grid density even for high-resolution landscape devices.
-      const cell = Math.max(12, Math.ceil(Math.max(viewW / 62, viewH / 48)));
+      const cell = Math.max(7, Math.ceil(Math.max(viewW / 92, viewH / 72)));
       const cols = Math.ceil(viewW / cell) + 8;
       const rows = Math.ceil(viewH / cell) + 8;
       if (this.cols !== cols || this.rows !== rows || this.cell !== cell || this.room !== room) {
@@ -47,10 +53,13 @@
         this.p2 = new Float32Array(n);
         this.canvas.width = cols;
         this.canvas.height = rows;
+        this.previousCanvas.width = cols;
+        this.previousCanvas.height = rows;
+        this.previousValid = false;
         this.image = this.ctx.createImageData(cols, rows);
         this.ox = Math.floor(camX / cell) - 4;
         this.oy = Math.floor(camY / cell) - 4;
-          this.accumulator = 0;
+        this.accumulator = 0;
         this.seed++;
         for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
           const i = y * cols + x;
@@ -65,13 +74,13 @@
 
     base(wx, wy, room) {
       let amount;
-      if (room !== null) amount = .53;
+      if (room !== null) amount = .88;
       else {
         const type = this.biomeAt(wx, wy);
-        amount = type === "mire" ? .91
-          : type === "twilight" ? .78
-          : type === "forest" ? .58
-          : type === "highlands" ? .40 : .30;
+        amount = type === "mire" ? 1.20
+          : type === "twilight" ? 1.08
+          : type === "forest" ? .87
+          : type === "highlands" ? .70 : .60;
       }
       // Long, low cloud banks. The wave repeats spatially, not per frame.
       const broad = Math.sin(wx * .0094 + wy * .0042) * .25
@@ -97,7 +106,7 @@
       const newOx = Math.floor(camX / this.cell) - 4;
       const newOy = Math.floor(camY / this.cell) - 4;
       const shiftX = newOx - this.ox, shiftY = newOy - this.oy;
-      if (!shiftX && !shiftY) return;
+      if (!shiftX && !shiftY) return false;
       const w = this.cols, h = this.rows;
       if (Math.abs(shiftX) >= w || Math.abs(shiftY) >= h) {
         this.ox = newOx; this.oy = newOy;
@@ -107,7 +116,7 @@
           this.u[i]=this.windX(wx,wy);
           this.v[i]=this.windY(wx,wy);
         }
-        return;
+        return true;
       }
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const i=y*w+x, sx=x+shiftX, sy=y+shiftY;
@@ -127,6 +136,7 @@
       [this.u,this.nu]=[this.nu,this.u];
       [this.v,this.nv]=[this.nv,this.v];
       this.ox=newOx;this.oy=newOy;
+      return true;
     }
 
     // Inline bilinear sampler. Backtracing lets all fog structures drift with
@@ -272,7 +282,7 @@
         data[o]=Math.max(0,Math.min(255,r+shade));
         data[o+1]=Math.max(0,Math.min(255,g+shade));
         data[o+2]=Math.max(0,Math.min(255,b+shade));
-        data[o+3]=Math.min(180,Math.round(d*192));
+        data[o+3]=Math.min(235,Math.round(Math.pow(d,.82)*255));
       }
       this.ctx.putImageData(this.image,0,0);
     }
@@ -280,11 +290,23 @@
     update(dt,camX,camY,room,scene,viewW,viewH) {
       this.clock+=dt;
       this.configure(viewW,viewH,camX,camY,room);
-      this.rebase(camX,camY);
+      const shifted=this.rebase(camX,camY);
       this.accumulator=Math.min(this.stepSeconds*2,this.accumulator+dt);
-      if(this.accumulator<this.stepSeconds)return;
+      if(this.accumulator<this.stepSeconds) {
+        // The simulation grid moved, so regenerate its current texture NOW.
+        // Otherwise the image is drawn at a new origin with stale texels.
+        if(shifted)this.renderTexture();
+        return;
+      }
       const elapsed=this.stepSeconds;
       this.accumulator-=this.stepSeconds;
+      // Hold the previously rendered field at its own world-space origin.
+      if(shifted)this.renderTexture();
+      this.previousOx=this.ox;
+      this.previousOy=this.oy;
+      this.previousCtx.clearRect(0,0,this.cols,this.rows);
+      this.previousCtx.drawImage(this.canvas,0,0);
+      this.previousValid=true;
       this.stirActors(scene);
       this.integrate(elapsed);
       this.renderTexture();
@@ -298,8 +320,16 @@
       if(!this.cols)return;
       ctx.save();
       ctx.imageSmoothingEnabled=true;
-      ctx.globalAlpha=foreground?.25:.84;
-      const offset=foreground?-9:0;
+      const strength=foreground?.34:1;
+      const offset=foreground?-7:0;
+      const alpha=this.previousValid?Math.min(1,this.accumulator/this.stepSeconds):1;
+      if(this.previousValid && alpha<.999) {
+        ctx.globalAlpha=strength*(1-alpha);
+        ctx.drawImage(this.previousCanvas,
+          this.previousOx*this.cell, this.previousOy*this.cell+offset,
+          this.cols*this.cell, this.rows*this.cell);
+      }
+      ctx.globalAlpha=strength*alpha;
       ctx.drawImage(this.canvas,
         this.ox*this.cell, this.oy*this.cell+offset,
         this.cols*this.cell, this.rows*this.cell);
