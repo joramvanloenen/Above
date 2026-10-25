@@ -53,6 +53,14 @@ Each area uses its own enemy type: **71 roaming enemies across the five biomes**
 - The camera can move freely while fog remains **anchored in world coordinates**; simulation cells are preserved when the viewport shifts and reset only on resize or entering/leaving a crypt.
 - Runs in Canvas 2D without WebGL, external shaders, downloadable assets or additional dependencies. Main implementation: `fog.js`.
 
+## Fog resolution and hit-response fix
+
+- Fog physics remains lightweight at **15 Hz**, with roughly 5-pixel world-space fluid cells on portrait mobile screens. Each simulation cell is reconstructed into a **4 × 4 high-resolution fog texture** using bicubic density sampling (16× the render texels), for smooth detail without 16× the fluid cost.
+- Smooth temporal blending and camera-rebase alignment remain active; fine cloud folds provide detail above the fluid-grid resolution.
+- Enemy hit ranges now match their actual approach distances, especially bandits, ghosts and stone golems, so their attacks reliably connect when close enough.
+- Every confirmed hit immediately produces a **high-contrast full-screen red flash** with a white-red center and deeper red edges. A canvas-based tint provides a fallback in addition to the top-level screen overlay. The flash fades over approximately 0.6 seconds.
+- These changes preserve the 50% smaller sprites, sword/crossbow combat, enemy AI and crypt navigation.
+
 ## Fog polish, hit feedback and object scale
 
 - The fog has **higher density**, strongest in the swamp and twilight grove, and uses a **finer ~7-world-pixel simulation grid** at common mobile viewport sizes, still updated at only **15 Hz**.
