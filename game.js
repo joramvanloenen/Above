@@ -279,10 +279,10 @@
   function generateTrees() {
     // Cluster planting creates the dense, tangled woodland silhouettes in the reference.
     // Less than a quarter of the old woodland density, focused into actual forests.
-    for(let c=0;c<96;c++){
+    for(let c=0;c<240;c++){
       const x=rbetween(85,W-85),y=rbetween(115,H-100);
       if(mapRand()>BIOMES[biomeAt(x,y)].trees)continue;
-      const n=2+Math.floor(mapRand()*5);
+      const n=3+Math.floor(mapRand()*6);
       const dominant=Math.floor(mapRand()*5);
       for(let j=0;j<n;j++){
         const xx=x+rbetween(-48,48),yy=y+rbetween(-43,43);
