@@ -45,3 +45,14 @@
   box-shadow:inset 0 0 0 max(12px,3vmin) rgba(246,90,100,.42);
   will-change:opacity;
 }
+
+/* The volumetric WebGL canvas is displayed independently of pixel-art
+   nearest-neighbour scaling. Browser bilinear upscale keeps soft cloud edges. */
+#world{z-index:0}
+.volumetric-fog-layer{
+  position:absolute;inset:0;width:100%;height:100%;
+  display:block;pointer-events:none;z-index:1;
+  image-rendering:auto;opacity:.36;
+}
+#vignette{z-index:2}
+.topbar,.health,.boss-bar,.notice,.bottom-hint{z-index:4}
