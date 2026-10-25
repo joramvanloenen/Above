@@ -139,6 +139,9 @@
   let dogSprites={},knightSprites={};
   let bg=null, audio=null,cryptFloor=null;
   const cryptProps=[];
+  // Stable scene object: no allocations in the per-frame fluid update.
+  const fogScene={player,dog,sheep,enemies,boss};
+  let groundFog=null;
 
   function resize() {
     screenW = Math.max(105,Math.ceil(innerWidth / SCALE));
@@ -1736,6 +1739,7 @@
     ctx.fillStyle="#252737";ctx.fillRect(0,0,screenW,screenH);
     ctx.save();ctx.translate(-cx,-cy);
     drawCryptBackdrop(ctx);
+    if(groundFog)groundFog.draw(ctx,false);
     const ordered=[];
     for(const e of enemies)if(!e.dead&&inCurrentRoom(e))ordered.push({y:e.y,type:"enemy",o:e});
     ordered.push({y:player.y,type:"knight",o:player},{y:dog.y,type:"dog",o:dog});
@@ -1745,7 +1749,9 @@
       else if(a.type==="knight")drawKnight(ctx);
       else drawDog(ctx);
     }
-    drawBolts(ctx);drawParticles(ctx);
+    drawBolts(ctx);
+    if(groundFog)groundFog.draw(ctx,true);
+    drawParticles(ctx);
     ctx.restore();
   }
 
@@ -1772,6 +1778,8 @@
       if(rock.x<cx-9||rock.x>cx+screenW+9||rock.y<cy-9||rock.y>cy+screenH+9)continue;
       drawStone(ctx,rock.x,rock.y,Math.floor(rock.size),rock.kind);
     }
+    // Diffuse low-altitude fog under characters; depth wisps render above them.
+    if(groundFog)groundFog.draw(ctx,false);
     // Sort trunks, sheep, dog and ancient standing stones by foot position.
     const actors=[];
     for(const t of trees){
@@ -1807,7 +1815,9 @@
       else if(a.kind===7)drawEnemy(ctx,a.object);
       else drawShrine(ctx,a.object);
     }
-    drawMoths(ctx);drawBark(ctx);drawBolts(ctx);drawParticles(ctx);
+    drawMoths(ctx);drawBark(ctx);drawBolts(ctx);
+    if(groundFog)groundFog.draw(ctx,true);
+    drawParticles(ctx);
     ctx.restore();
   }
 
@@ -1826,6 +1836,7 @@
     const width=underground===null?W:420,height=underground===null?H:300;
     camX=clamp(lerp(camX,focus.x-screenW/2,ease),0,Math.max(0,width-screenW));
     camY=clamp(lerp(camY,focus.y-screenH/2,ease),0,Math.max(0,height-screenH));
+    groundFog.update(dt,camX,camY,underground,fogScene,screenW,screenH);
     drawWorld();
     requestAnimationFrame(frame);
   }
@@ -1872,6 +1883,8 @@
     buildTreeSprites();buildSheepSprites();buildDogSprites();buildKnightSprites();
     generateTrees();makeGround();spawnLife();spawnTargets();spawnAdventure();
     healthRefresh();weaponButton.dataset.weapon="sword";
+    groundFog=new window.AboveGroundFog(document,biomeAt);
+    groundFog.configure(screenW,screenH,camX,camY,underground);
     setupInput();
     window.addEventListener("resize",resize);
     window.addEventListener("orientationchange",resize);
