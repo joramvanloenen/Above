@@ -57,6 +57,32 @@
   const mapRand = seeded(493);
   const rbetween = (lo, hi) => lo + (hi - lo) * mapRand();
   const smoothstep = (a, b, v) => { const x = clamp((v - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+
+  // The terrain and enemy ecology share the same stable, spatial biome map.
+  // Meandering coordinate offsets prevent straight rectangular biome borders.
+  const BIOMES={
+    meadow:{label:"SUNLIT MEADOW",trees:.14,ground:["#a5b37b","#aab681","#9fab76"],enemy:"bandit",quota:12},
+    forest:{label:"OLD GROWTH WOODS",trees:1,ground:["#819a77","#879e79","#7c9573"],enemy:"wolf",quota:16},
+    mire:{label:"THE SINKING MIRE",trees:.04,ground:["#839078","#89947c","#7e8974"],enemy:"slime",quota:17},
+    highlands:{label:"STONY HIGHLANDS",trees:.04,ground:["#b0aa86","#aaa784","#b4ad8b"],enemy:"golem",quota:12},
+    twilight:{label:"TWILIGHT GROVE",trees:.46,ground:["#8e8b90","#918994","#8c8591"],enemy:"wisp",quota:14}
+  };
+  const biomeCenters=[
+    ["meadow",700,760,710,650],["forest",285,300,640,620],
+    ["mire",1490,1120,730,650],["highlands",665,1405,840,680],
+    ["twilight",1460,315,770,650]
+  ];
+  function biomeAt(x,y){
+    const wx=x+35*Math.sin(y*.009)+20*Math.sin((x+y)*.014);
+    const wy=y+30*Math.sin(x*.008);
+    let id="meadow",nearest=Infinity;
+    for(const [name,cx,cy,rx,ry] of biomeCenters){
+      const d=((wx-cx)/rx)**2+((wy-cy)/ry)**2;
+      if(d<nearest){nearest=d;id=name;}
+    }
+    return id;
+  }
+  function biomeLabel(x,y){return BIOMES[biomeAt(x,y)].label;}
   function duskWeight(x,y){
     const dx=(x-1450)/290,dy=(y-340)/215;
     return 1-smoothstep(.5,1.18,dx*dx+dy*dy);
@@ -141,11 +167,33 @@
     bg=makeCanvas(W,H);
     const g=bg.getContext("2d");
     g.imageSmoothingEnabled=false;
-    g.fillStyle=PAL.grass; g.fillRect(0,0,W,H);
-    for(let i=0;i<150;i++){
+    g.fillStyle=PAL.grass;g.fillRect(0,0,W,H);
+    // Broad bands of distinct terrain colour. Built once, not each frame.
+    for(let y=0;y<H;y+=12)for(let x=0;x<W;x+=12){
+      const colors=BIOMES[biomeAt(x+6,y+6)].ground;
+      const variation=Math.abs(Math.floor(Math.sin(x*.129+y*.077)*13871))%colors.length;
+      pix(g,x,y,12,12,colors[variation]);
+    }
+    for(let i=0;i<175;i++){
       const x=rbetween(0,W),y=rbetween(0,H);
-      const color=["#a7b578","#adb779","#9cae73","#a1ad77","#a8ad73","#a9b37c"][Math.floor(mapRand()*6)];
-      noisePatch(g,x,y,rbetween(22,105),rbetween(15,72),color,.7);
+      const colors=BIOMES[biomeAt(x,y)].ground;
+      noisePatch(g,x,y,rbetween(22,84),rbetween(15,61),
+        colors[Math.floor(mapRand()*colors.length)],.45);
+    }
+    // Region-specific ground detail, rather than identical flowers everywhere.
+    for(let i=0;i<2600;i++){
+      const x=Math.floor(rbetween(10,W-10)),y=Math.floor(rbetween(10,H-10));
+      const region=biomeAt(x,y),v=mapRand();
+      if(region==="mire"){
+        if(v<.32){pix(g,x,y,2,4,"#617e71");pix(g,x+2,y-3,1,6,"#a5b38e");}
+        else if(v<.42)pix(g,x,y,5,2,"#6f827b");
+      }else if(region==="highlands"){
+        if(v<.56){pix(g,x,y,4,2,"#8f8b82");pix(g,x+2,y-2,3,2,"#d0c1a3");}
+      }else if(region==="twilight"){
+        if(v<.42){pix(g,x,y,2,3,"#696c86");pix(g,x+3,y-2,2,2,"#b2a1aa");}
+      }else if(region==="forest"){
+        if(v<.38){pix(g,x,y,5,1,"#66866d");pix(g,x+2,y-2,2,2,"#6a8a70");}
+      }else if(v<.34){pix(g,x,y,2,2,"#d0c48f");}
     }
     // Faint trails join natural clearings; keep them mossy rather than drawing roads.
     for(const seg of pathSegments){
@@ -230,23 +278,25 @@
   }
   function generateTrees() {
     // Cluster planting creates the dense, tangled woodland silhouettes in the reference.
-    for(let c=0;c<145;c++){
+    // Less than a quarter of the old woodland density, focused into actual forests.
+    for(let c=0;c<96;c++){
       const x=rbetween(85,W-85),y=rbetween(115,H-100);
-      const n=3+Math.floor(mapRand()*11);
+      if(mapRand()>BIOMES[biomeAt(x,y)].trees)continue;
+      const n=2+Math.floor(mapRand()*5);
       const dominant=Math.floor(mapRand()*5);
       for(let j=0;j<n;j++){
-        const xx=x+rbetween(-39,39),yy=y+rbetween(-33,33);
+        const xx=x+rbetween(-48,48),yy=y+rbetween(-43,43);
         if(xx<15||xx>W-15||yy<30||yy>H-15)continue;
-        if(meadowWeight(xx,yy)>.53)continue;
+        if(meadowWeight(xx,yy)>.53 || mapRand()>BIOMES[biomeAt(xx,yy)].trees)continue;
         plantTree(xx,yy,dominant);
       }
     }
     // Deliberate wooded borders frame the opening meadow.
-    const borders=[[555,720,40],[814,704,43],[594,972,36],[853,939,40],[502,622,35],[770,525,35]];
+    const borders=[[555,720,12],[814,704,10],[594,972,9],[853,939,11],[502,622,10],[770,525,9]];
     for(const [cx,cy,count] of borders){
       for(let i=0;i<count;i++){
         const x=cx+rbetween(-34,34),y=cy+rbetween(-75,75);
-        if(meadowWeight(x,y)>.58)continue;
+        if(meadowWeight(x,y)>.58 || mapRand()>BIOMES[biomeAt(x,y)].trees*.7)continue;
         plantTree(x,y,Math.floor(mapRand()*5));
       }
     }
@@ -1178,24 +1228,41 @@
   }
 
 
+
   function spawnAdventure(){
     tombs.push({id:0,x:827,y:1090,name:"CRYPT OF ASH"},{id:1,x:356,y:363,name:"FORGOTTEN VAULT"},{id:2,x:1286,y:790,name:"WEEPING TOMB"});
-    const makeEnemy=(type,x,y,room=null)=>({
-      type,x,y,room,originX:x,originY:y,
-      hp:type==="bandit"?5:type==="ghost"?4:3,
-      maxHp:type==="bandit"?5:type==="ghost"?4:3,
-      r:type==="bandit"?8:7,dead:false,vx:0,vy:0,flash:0,
-      phase:rand(0,TAU),cooldown:rand(.7,2),attackTime:0,charge:0,
-      wander:rand(0,TAU),stun:0,hitTimer:0
-    });
-    for(const [x,y] of [[858,847],[746,1050],[495,583],[1038,947],[1326,854],[1268,487],[1562,913]])
-      enemies.push(makeEnemy("bandit",x,y));
-    for(const [x,y] of [[761,907],[907,912],[1195,935],[989,700],[1480,925],[1388,1099],[561,475],[1514,1144]])
-      enemies.push(makeEnemy("slime",x,y));
+    const profiles={
+      bandit:{hp:5,r:8},wolf:{hp:4,r:8},slime:{hp:3,r:7},
+      golem:{hp:10,r:11},wisp:{hp:4,r:8},ghost:{hp:4,r:7}
+    };
+    const makeEnemy=(type,x,y,room=null)=>{
+      const {hp,r}=profiles[type];
+      return {type,x,y,room,originX:x,originY:y,hp,maxHp:hp,r,
+        dead:false,vx:0,vy:0,flash:0,phase:rbetween(0,TAU),
+        cooldown:rbetween(.7,2),attackTime:0,charge:0,wander:rbetween(0,TAU),
+        stun:0,hitTimer:0};
+    };
+    // Each overworld region has exclusive enemy species and a fixed population.
+    // Keep the start, tomb entrances, and boss collision zone navigable.
+    const totals={meadow:0,forest:0,mire:0,highlands:0,twilight:0};
+    let remaining=Object.values(BIOMES).reduce((n,b)=>n+b.quota,0);
+    for(let attempts=0;attempts<18000 && remaining>0;attempts++){
+      const x=rbetween(55,W-55),y=rbetween(65,H-60);
+      const region=biomeAt(x,y),config=BIOMES[region];
+      if(totals[region]>=config.quota)continue;
+      if(Math.hypot(x-player.x,y-player.y)<170)continue;
+      if(Math.hypot(x-HOME.x,y-HOME.y)<75)continue;
+      if(Math.hypot(x-boss.x,y-boss.y)<100)continue;
+      if(tombs.some(t=>Math.hypot(x-t.x,y-t.y)<42))continue;
+      if(trees.some(t=>Math.abs(t.x-x)<t.trunkRadius+13 && Math.abs(t.y-y)<t.trunkRadius+13))continue;
+      if(enemies.some(e=>e.room===null && Math.hypot(x-e.x,y-e.y)<43))continue;
+      enemies.push(makeEnemy(config.enemy,x,y));
+      totals[region]++;remaining--;
+    }
     for(let room=0;room<3;room++){
       for(let i=0;i<4+room;i++){
-        const x=85+(i%3)*114+rand(-12,12);
-        const y=90+Math.floor(i/3)*90+rand(-9,9);
+        const x=85+(i%3)*114+rbetween(-12,12);
+        const y=90+Math.floor(i/3)*90+rbetween(-9,9);
         enemies.push(makeEnemy("ghost",x,y,room));
       }
     }
@@ -1230,7 +1297,7 @@
       underground=null;
       player.x=ret.x+23;player.y=ret.y+30;
       dog.x=player.x-14;dog.y=player.y+10;
-      areaLabel.textContent="SUNLIT MEADOW";
+      areaLabel.textContent=biomeLabel(player.x,player.y);
       showNotice("BACK IN DAYLIGHT","The woodland welcomes you home.",3.4);
     }else{
       entranceReturn={x:p.x,y:p.y};
@@ -1270,7 +1337,7 @@
       underground=null;entranceReturn=null;
       player.x=680;player.y=821;dog.x=667;dog.y=837;
       invincible=2.2;sword.active=false;sword.step=0;
-      bolts.length=0;areaLabel.textContent="SUNLIT MEADOW";
+      bolts.length=0;areaLabel.textContent=biomeLabel(player.x,player.y);
       camX=player.x-screenW/2;camY=player.y-screenH/2;
     }
   }
@@ -1278,7 +1345,7 @@
     if(e.dead)return;
     e.hp=Math.max(0,e.hp-damage);e.flash=.23;e.stun=e.type==="boss"?.15:.29;
     e.vx+=dx*(e.type==="boss"?5:13);e.vy+=dy*(e.type==="boss"?5:13);
-    addParticles(e.x,e.y-8,e.type==="ghost"?"#a4e4d3":e.type==="slime"?"#b9da86":"#e6b994",7);
+    addParticles(e.x,e.y-8,e.type==="ghost"||e.type==="wisp"?"#a4e4d3":e.type==="slime"?"#b9da86":e.type==="golem"?"#c2b9aa":e.type==="wolf"?"#a6a29c":"#e6b994",7);
     sound("impact");
     if(e.hp<=0){
       e.dead=true;
@@ -1354,32 +1421,36 @@
       e.phase+=dt;e.flash=Math.max(0,e.flash-dt);
       e.stun=Math.max(0,e.stun-dt);e.cooldown-=dt;
       const dx=player.x-e.x,dy=player.y-e.y,d=Math.max(1,Math.hypot(dx,dy));
-      const detect=e.type==="ghost"?140:e.type==="bandit"?95:75;
-      const speed=e.type==="ghost"?20:e.type==="bandit"?22:14;
+      const detect={ghost:140,bandit:100,slime:80,wolf:126,golem:96,wisp:144}[e.type]||90;
+      const speed={ghost:20,bandit:22,slime:14,wolf:39,golem:12,wisp:23}[e.type]||18;
       const near=d<detect;
       let vx=0,vy=0;
       if(e.stun<=0 && near){
-        if(e.type==="slime"){
+        if(e.type==="slime"||e.type==="wolf"){
           if(e.cooldown<=0){
-            e.cooldown=rand(1,1.7);
-            e.charge=.35;
-            e.vx=dx/d*62;e.vy=dy/d*62;
+            e.cooldown=e.type==="wolf"?rand(1.2,1.8):rand(1,1.7);
+            e.charge=e.type==="wolf"?.43:.35;
+            const burst=e.type==="wolf"?84:62;
+            e.vx=dx/d*burst;e.vy=dy/d*burst;
           }
           if(e.charge>0){
             e.charge=Math.max(0,e.charge-dt);
             vx=e.vx;vy=e.vy;
-          }
-        }else {
-          const approach=e.type==="bandit"?d>19:d>13;
-          if(approach){vx=dx/d*speed;vy=dy/d*speed;}
+          }else if(e.type==="wolf"){vx=dx/d*speed*.64;vy=dy/d*speed*.64;}
+        }else if(e.type==="wisp"){
+          vx=dx/d*speed+Math.cos(e.phase*3.7)*11;
+          vy=dy/d*speed+Math.sin(e.phase*3.2)*11;
+        }else{
+          const reach=e.type==="golem"?23:e.type==="bandit"?19:13;
+          if(d>reach){vx=dx/d*speed;vy=dy/d*speed;}
         }
-      }else if(e.stun<=0 && e.type!=="ghost"){
+      }else if(e.stun<=0 && e.type!=="ghost" && e.type!=="wisp"){
         // Small idle patrol instead of stationary enemies.
         e.wander+=dt*.46;
         if(Math.hypot(e.x-e.originX,e.y-e.originY)>30){
           vx=(e.originX-e.x)*.8;vy=(e.originY-e.y)*.8;
         }else{vx=Math.cos(e.wander)*3;vy=Math.sin(e.wander)*3;}
-      }else if(e.stun<=0 && e.type==="ghost"){
+      }else if(e.stun<=0 && (e.type==="ghost"||e.type==="wisp")){
         vx=Math.cos(e.phase*.7)*3;vy=Math.sin(e.phase*.65)*3;
       }
       e.x+=vx*dt;e.y+=vy*dt;
@@ -1388,15 +1459,15 @@
       if(e.stun>0){e.vx*=Math.exp(-dt*9);e.vy*=Math.exp(-dt*9);}
       if(underground!==null){
         e.x=clamp(e.x,51,366);e.y=clamp(e.y,56,246);
-      }else if(e.type!=="ghost")collideTrees(e,e.r);
+      }else if(e.type!=="ghost"&&e.type!=="wisp")collideTrees(e,e.r);
       if(near && d<e.r+12){
-        if(e.type==="slime"){
+        if(e.type==="slime"||e.type==="wolf"){
           if(e.hitTimer<=0 && e.charge>0){
-            e.hitTimer=1.4;damagePlayer(1,e.x,e.y);
+            e.hitTimer=e.type==="wolf"?1.2:1.4;damagePlayer(1,e.x,e.y);
           }
         }else if(e.cooldown<=0){
-          e.cooldown=e.type==="ghost"?1.2:.94;
-          damagePlayer(1,e.x,e.y);
+          e.cooldown=e.type==="golem"?1.75:e.type==="ghost"||e.type==="wisp"?1.2:.94;
+          damagePlayer(e.type==="golem"?2:1,e.x,e.y);
         }
       }
       e.hitTimer=Math.max(0,e.hitTimer-dt);
@@ -1414,7 +1485,7 @@
     if(engaged){
       bossFill.style.width=Math.round(boss.hp/boss.maxHp*100)+"%";
       if(areaLabel.textContent!=="THE MIRE KING'S BOG")areaLabel.textContent="THE MIRE KING'S BOG";
-    }else if(areaLabel.textContent==="THE MIRE KING'S BOG")areaLabel.textContent="SUNLIT MEADOW";
+    }else if(areaLabel.textContent==="THE MIRE KING'S BOG")areaLabel.textContent=biomeLabel(player.x,player.y);
     if(!engaged)return;
     boss.cooldown-=dt;boss.spawnTimer-=dt;
     if(boss.windup>0){
@@ -1547,7 +1618,18 @@
     const x=Math.round(e.x),y=Math.round(e.y);
     const bob=Math.sin(e.phase*(e.type==="slime"?8:3.5));
     const flash=e.flash>0;
-    if(e.type==="ghost"){
+    if(e.type==="wisp"){
+      const yy=y-14-Math.round(bob*4);
+      g.globalAlpha=flash?1:.72+.2*Math.sin(e.phase*1.8);
+      pix(g,x-12,y+1,24,2,"#817e9a");
+      pix(g,x-7,yy+4,14,14,flash?"#fff0d2":"#8876b2");
+      pix(g,x-9,yy+8,18,8,flash?"#fff0d2":"#b2a1cd");
+      pix(g,x-6,yy+1,12,9,"#d4c9e0");
+      pix(g,x-2,yy+3,4,3,"#f4eeeb");
+      pix(g,x-4,yy+9,2,2,"#3a3b55");pix(g,x+3,yy+9,2,2,"#3a3b55");
+      pix(g,x-10,yy+14,4,6,"#9b93bb");pix(g,x+6,yy+14,4,5,"#9b93bb");
+      g.globalAlpha=1;
+    }else if(e.type==="ghost"){
       g.globalAlpha=flash?.95:.57+.15*Math.sin(e.phase*2);
       const yy=y-13-Math.round(bob*3);
       pix(g,x-10,yy+18,20,2,"#506877");
@@ -1567,6 +1649,27 @@
       pix(g,x-4,yy-8,4,3,"#a9cf7f");
       pix(g,x+3,yy-5,3,3,"#b3d891");
       pix(g,x-5,yy-3,2,2,"#34445a");pix(g,x+4,yy-3,2,2,"#34445a");
+    }else if(e.type==="wolf"){
+      const leap=Math.max(0,Math.sin(e.phase*9))*2;
+      const yy=y-Math.round(leap);
+      pix(g,x-12,y+1,24,2,"#748f79");
+      pix(g,x-10,yy-12,20,10,flash?"#f7e6be":"#777e7b");
+      pix(g,x-7,yy-16,12,9,"#a5a49d");
+      pix(g,x-10,yy-20,5,8,"#484a55");pix(g,x+4,yy-21,5,8,"#484a55");
+      pix(g,x-5,yy-12,3,2,"#252a37");pix(g,x+3,yy-12,3,2,"#252a37");
+      pix(g,x-2,yy-8,4,3,"#d9c2b1");
+      pix(g,x-9,yy-2,4,5,"#464755");pix(g,x+5,yy-2,4,5,"#464755");
+    }else if(e.type==="golem"){
+      const step=Math.sin(e.phase*2)>0?1:0;
+      pix(g,x-13,y+2,27,3,"#918c81");
+      pix(g,x-10,y-13+step,9,17,"#665f62");
+      pix(g,x+2,y-13-step,9,17,"#615b60");
+      pix(g,x-15,y-29,30,19,"#494752");
+      pix(g,x-13,y-31,25,21,flash?"#f1e2be":"#96918a");
+      pix(g,x-6,y-24,7,3,"#a8b8a7");pix(g,x+4,y-24,7,3,"#a8b8a7");
+      pix(g,x-17,y-25,6,19,"#767071");pix(g,x+12,y-25,6,19,"#767071");
+      pix(g,x-5,y-19,3,3,"#e5ce89");pix(g,x+5,y-19,3,3,"#e5ce89");
+      pix(g,x-8,y-13,16,3,"#58525a");
     }else if(e.type==="bandit"){
       const step=Math.sin(e.phase*6)>0?1:0;
       pix(g,x-9,y+1,18,2,"#84957e");
@@ -1604,8 +1707,9 @@
       }
     }
     if(e.hp<e.maxHp && !e.dead && e.type!=="boss"){
-      pix(g,x-10,y-(e.type==="ghost"?31:29),20,2,"#342f45");
-      pix(g,x-10,y-(e.type==="ghost"?31:29),Math.max(1,20*e.hp/e.maxHp),2,"#ca8a88");
+      const barY=y-(e.type==="ghost"||e.type==="wisp"||e.type==="golem"?35:29);
+      pix(g,x-10,barY,20,2,"#342f45");
+      pix(g,x-10,barY,Math.max(1,20*e.hp/e.maxHp),2,"#ca8a88");
     }
   }
   function drawBolts(g){
@@ -1707,6 +1811,10 @@
     updatePlayer(dt);updateSword(dt);
     if(underground===null)updateSheep(dt);
     updateEnemies(dt);updateParticles(dt);updateActionLabel();
+    if(underground===null && (boss.dead || Math.hypot(player.x-boss.x,player.y-boss.y)>=boss.arena)){
+      const region=biomeLabel(activeActor().x,activeActor().y);
+      if(areaLabel.textContent!==region)areaLabel.textContent=region;
+    }
     const ease=1-Math.exp(-dt*4.5);
     const focus=activeActor();
     const width=underground===null?W:420,height=underground===null?H:300;
