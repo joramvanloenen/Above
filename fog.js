@@ -21,7 +21,6 @@
       this.stepSeconds = 1 / 15;
       this.canvas = document.createElement("canvas");
       this.ctx = this.canvas.getContext("2d", {willReadFrequently: false});
-      this.positions = new WeakMap();
       this.steps = 0;
       this.seed = 0;
     }
@@ -51,8 +50,7 @@
         this.image = this.ctx.createImageData(cols, rows);
         this.ox = Math.floor(camX / cell) - 4;
         this.oy = Math.floor(camY / cell) - 4;
-        this.positions = new WeakMap();
-        this.accumulator = 0;
+          this.accumulator = 0;
         this.seed++;
         for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
           const i = y * cols + x;
@@ -147,9 +145,10 @@
 
     stirActor(a, strength, radius, room) {
       if (!a || a.dead || (Object.prototype.hasOwnProperty.call(a,"room") && a.room!==room)) return;
-      const old=this.positions.get(a);
-      this.positions.set(a, {x:a.x,y:a.y});
-      const ddx=old?a.x-old.x:0, ddy=old?a.y-old.y:0;
+      // Motion history lives on existing game actors: zero temporary objects / step.
+      const ddx=Number.isFinite(a._fogX)?a.x-a._fogX:0;
+      const ddy=Number.isFinite(a._fogY)?a.y-a._fogY:0;
+      a._fogX=a.x;a._fogY=a.y;
       const moved=Math.hypot(ddx,ddy);
       // Scene changes and teleporting are not motion; never inject huge impulses.
       const speed=moved>110?0:Math.min(2.7,moved/(this.stepSeconds*48));
@@ -284,8 +283,8 @@
       this.rebase(camX,camY);
       this.accumulator=Math.min(this.stepSeconds*2,this.accumulator+dt);
       if(this.accumulator<this.stepSeconds)return;
-      const elapsed=this.accumulator;
-      this.accumulator=0;
+      const elapsed=this.stepSeconds;
+      this.accumulator-=this.stepSeconds;
       this.stirActors(scene);
       this.integrate(elapsed);
       this.renderTexture();
