@@ -612,28 +612,78 @@
       if(audio.state==="suspended")audio.resume();
       const now=audio.currentTime;
       const osc=audio.createOscillator(),gain=audio.createGain();
-      osc.type=kind==="bark"?"square":"sine";
-      osc.frequency.setValueAtTime(kind==="bark"?210:700,now);
-      osc.frequency.exponentialRampToValueAtTime(kind==="bark"?80:1100,now+(kind==="bark"?.18:.36));
+      osc.type=kind==="bark"?"square":kind==="slash"?"triangle":"sine";
+      osc.frequency.setValueAtTime(kind==="bark"?210:kind==="slash"?580:kind==="impact"?190:700,now);
+      osc.frequency.exponentialRampToValueAtTime(kind==="bark"?80:kind==="slash"?160:kind==="impact"?95:1100,now+(kind==="bark"?.18:kind==="slash"?.16:.36));
       gain.gain.setValueAtTime(.0001,now);
-      gain.gain.exponentialRampToValueAtTime(kind==="bark"?.09:.048,now+.015);
-      gain.gain.exponentialRampToValueAtTime(.0001,now+(kind==="bark"?.2:.38));
+      gain.gain.exponentialRampToValueAtTime(kind==="bark"?.09:kind==="slash"?.055:.048,now+.015);
+      gain.gain.exponentialRampToValueAtTime(.0001,now+(kind==="bark"?.2:kind==="slash"?.18:.38));
       osc.connect(gain);gain.connect(audio.destination);
-      osc.start(now);osc.stop(now+(kind==="bark"?.22:.39));
+      osc.start(now);osc.stop(now+(kind==="bark"?.22:kind==="slash"?.2:.39));
     }catch(err){/* silent mode is fine */}
   }
 
-  function doAction() {
-    if(time-barkTime<.49)return;
+  function nearestRelic() {
+    const me=activeActor();
+    let best=null,dist=24;
+    for(const relic of relics){
+      if(relic.found)continue;
+      const d=distance(relic,me);
+      if(d<dist){best=relic;dist=d;}
+    }
+    return best;
+  }
+
+  function tryInteract() {
+    const relic=nearestRelic();
+    if(!relic)return false;
+    relic.found=true;ringGlow=1.1;
+    addParticles(relic.x,relic.y,"#e4c58d",24);
+    sound("find");
+    showNotice("AN OLD WIND CHIME","It remembers the path home. "+relics.filter(r=>r.found).length+" of 3 found.",5);
+    return true;
+  }
+
+  function switchCharacter() {
+    controlled=controlled==="knight"?"dog":"knight";
+    currentInput=null;
+    sword.active=false;sword.step=0;sword.queued=false;
+    switchText.textContent=controlled.toUpperCase();
+    switchButton.dataset.active=controlled;
+    switchButton.setAttribute("aria-label","Switch control to "+(controlled==="knight"?"dog":"knight"));
+    actionIcon.innerHTML=controlled==="dog"?dogIconMarkup:swordIconMarkup;
+    showNotice(controlled==="knight"?"THE KNIGHT":"THE SHEEPDOG",
+      controlled==="knight"?"Tap quickly to chain three sword strikes. The third is a powerful finisher.":"Herd the flock with a bark. Your knight will follow behind.",3.3);
+    updateActionLabel();
+  }
+
+  function updateActionLabel() {
+    const relic=nearestRelic();
+    let label=controlled==="dog"?"BARK":"ATTACK";
+    let mode=controlled;
+    if(relic){label="USE";mode="use";}
+    else if(controlled==="knight"){
+      if(sword.active&&sword.step===2 || !sword.active&&sword.step===2&&time-sword.lastFinish<.62){
+        label="FINISH";mode="combo3";
+      }else if(sword.active&&sword.step===1 || !sword.active&&sword.step===1&&time-sword.lastFinish<.62){
+        label="COMBO";mode="combo2";
+      }
+    }
+    if(actionLabel.textContent!==label)actionLabel.textContent=label;
+    if(action.dataset.mode!==mode)action.dataset.mode=mode;
+    const aria=mode==="use"?"Interact":controlled==="dog"?"Bark":"Sword attack";
+    if(action.getAttribute("aria-label")!==aria)action.setAttribute("aria-label",aria);
+  }
+
+  function bark() {
+    if(time-barkTime<.48)return;
     barkTime=time;
-    action.classList.add("pressed");
-    setTimeout(()=>action.classList.remove("pressed"),150);
     sound("bark");
     if(navigator.vibrate)navigator.vibrate(18);
-    addParticles(player.x,player.y-7,"#f2e6ca",8);
+    addParticles(dog.x,dog.y-7,"#f2e6ca",8);
     for(const s of sheep){
       if(s.home)continue;
-      const dx=s.x-player.x,dy=s.y-player.y,d=Math.hypot(dx,dy);
+      const dx=s.x-dog.x,dy=s.y-dog.y,d=Math.hypot(dx,dy);
       if(d<112){
         const power=1-d/125;
         const fx=dx/Math.max(1,d),fy=dy/Math.max(1,d);
@@ -644,33 +694,125 @@
         s.state="flee";s.stateTimer=0;
       }
     }
-    for(const relic of relics){
-      if(!relic.found&&distance(relic,player)<21){
-        relic.found=true;ringGlow=1;addParticles(relic.x,relic.y,"#e4c58d",24);
-        sound("find");
-        showNotice("AN OLD WIND CHIME","It remembers the path home. "+relics.filter(r=>r.found).length+" of 3 found.",5);
+  }
+
+  function startSwing(step) {
+    sword.active=true;
+    sword.step=step;
+    sword.elapsed=0;
+    sword.duration=COMBO_DURATIONS[step-1];
+    sword.queued=false;
+    sword.hit=false;
+    sword.facing=player.angle;
+    if(navigator.vibrate)navigator.vibrate(step===3?26:9);
+    sound("slash");
+    updateActionLabel();
+  }
+
+  function doAction() {
+    if(tryInteract())return;
+    if(controlled==="dog"){bark();return;}
+    if(sword.active){
+      // An early tap is buffered, including a tap during the recovery frames.
+      if(sword.step<3)sword.queued=true;
+      return;
+    }
+    const canChain=sword.step>0 && sword.step<3 && time-sword.lastFinish<.62;
+    startSwing(canChain?sword.step+1:1);
+  }
+
+  function hitSwordTargets() {
+    const radius=sword.step===3?47:35;
+    const cone=sword.step===3?1.65:1.29;
+    let found=false;
+    for(const o of obstacles){
+      if(o.broken)continue;
+      const dx=o.x-player.x,dy=(o.y-player.y)*1.12;
+      const dist=Math.hypot(dx,dy);
+      if(dist>radius+5)continue;
+      const theta=Math.atan2(dy,dx);
+      const diff=Math.atan2(Math.sin(theta-sword.facing),Math.cos(theta-sword.facing));
+      if(Math.abs(diff)>cone)continue;
+      found=true;
+      o.hitCount++;o.flash=.25;o.shake=.32;
+      if(o.type==="bramble"){
+        o.hp-=sword.step===3?3:1;
+        if(o.hp<=0){
+          o.broken=true;
+          addParticles(o.x,o.y,"#719784",17);
+          addParticles(o.x,o.y,"#57436e",12);
+        }else addParticles(o.x,o.y,"#c0ae89",7);
+      }else{
+        addParticles(o.x,o.y-10,"#e2c591",8);
       }
+    }
+    if(found){
+      sound("impact");
+      if(navigator.vibrate)navigator.vibrate(sword.step===3?32:13);
+    }
+  }
+
+  function updateSword(dt) {
+    if(!sword.active){
+      if(sword.step>0&&time-sword.lastFinish>.62)sword.step=0;
+      return;
+    }
+    sword.elapsed+=dt;
+    if(!sword.hit && sword.elapsed>=sword.duration*.38){
+      sword.hit=true;hitSwordTargets();
+      if(sword.step===3)addParticles(player.x+Math.cos(sword.facing)*25,
+        player.y+Math.sin(sword.facing)*20-8,"#e8dbc6",10);
+    }
+    if(sword.elapsed>=sword.duration){
+      sword.active=false;sword.lastFinish=time;
+      if(sword.queued&&sword.step<3)startSwing(sword.step+1);
     }
   }
 
   function updatePlayer(dt){
     let dx=0,dy=0,strength=0;
+    const leader=activeActor();
     if(currentInput){
       const ax=currentInput.x-currentInput.startX,ay=currentInput.y-currentInput.startY;
       const d=Math.hypot(ax,ay);
       if(d>7){strength=clamp((d-7)/35,0,1);dx=ax/d;dy=ay/d;}
     }
-    player.moving=strength;
+    leader.moving=strength;
     if(strength>.04){
-      const speed=player.speed*strength;
-      player.x+=dx*speed*dt;player.y+=dy*speed*dt;
-      player.angle=Math.atan2(dy,dx);
-      if(Math.abs(dx)>Math.abs(dy)*.85)player.face=dx>0?"right":"left";
-      else player.face=dy>0?"down":"up";
-      player.step+=dt*16*strength;
-      if(Math.random()<dt*3*strength)addParticles(player.x,player.y,"#bec08d",1);
+      const slow=leader===player&&sword.active?(sword.step===3?.52:.75):1;
+      const speed=leader.speed*strength*slow;
+      leader.x+=dx*speed*dt;leader.y+=dy*speed*dt;
+      leader.angle=Math.atan2(dy,dx);
+      if(Math.abs(dx)>Math.abs(dy)*.85)leader.face=dx>0?"right":"left";
+      else leader.face=dy>0?"down":"up";
+      leader.step+=dt*(leader===dog?16:11)*strength*slow;
+      if(Math.random()<dt*3*strength)addParticles(leader.x,leader.y,"#bec08d",1);
     }
-    collideTrees(player,4);
+    collideTrees(leader,leader===dog?4:5);
+
+    const follower=leader===player?dog:player;
+    const offset=leader===player?17:21;
+    const targetX=leader.x-Math.cos(leader.angle)*offset+6;
+    const targetY=leader.y-Math.sin(leader.angle)*offset+7;
+    const fx=targetX-follower.x,fy=targetY-follower.y;
+    const dist=Math.hypot(fx,fy);
+    follower.moving=dist>14?1:0;
+    if(dist>14){
+      const speed=Math.min(follower.speed*dt,Math.max(0,dist-10));
+      const step=dist>0?speed/dist:0;
+      follower.x+=fx*step;follower.y+=fy*step;
+      follower.angle=Math.atan2(fy,fx);
+      if(Math.abs(fx)>Math.abs(fy)*.85)follower.face=fx>0?"right":"left";
+      else follower.face=fy>0?"down":"up";
+      follower.step+=dt*(follower===dog?13:9)*clamp(dist/35,.45,1);
+      collideTrees(follower,follower===dog?4:5);
+    }
+    // Keep companions together if a tight thicket completely blocks their route.
+    if(dist>235){
+      follower.x=lerp(follower.x,leader.x-Math.cos(leader.angle)*20,dt*3);
+      follower.y=lerp(follower.y,leader.y-Math.sin(leader.angle)*20,dt*3);
+      collideTrees(follower,follower===dog?4:5);
+    }
   }
 
   function updateSheep(dt) {
@@ -694,9 +836,9 @@
         s.clock=rand(.7,2.2);
         s.wander+=rand(-1.2,1.2);
       }
-      const dx=s.x-player.x,dy=s.y-player.y;
+      const dx=s.x-dog.x,dy=s.y-dog.y;
       const dogDist=Math.max(.001,Math.hypot(dx,dy));
-      const danger=(player.moving>.23?53:36)/s.bravery;
+      const danger=(controlled==="dog"?(dog.moving>.23?53:36):14)/s.bravery;
       const aware=danger+28;
       if(dogDist<danger){
         const urgency=(danger-dogDist)/danger;
@@ -840,9 +982,83 @@
       m.phase+=dt*.48;
     }
     ringGlow=Math.max(0,ringGlow-dt*.8);
+    for(const o of obstacles){o.flash=Math.max(0,o.flash-dt);o.shake=Math.max(0,o.shake-dt);}
     if(noticeTimer>0){
       noticeTimer-=dt;
       if(noticeTimer<=0)notice.classList.add("fade");
+    }
+  }
+
+  function drawObstacle(g,o){
+    const x=Math.round(o.x+Math.sin(o.shake*29)*o.shake*4),y=Math.round(o.y);
+    if(o.broken){
+      pix(g,x-7,y+1,15,2,"#829b7b");
+      pix(g,x-4,y-1,4,3,"#715a6e");
+      pix(g,x+3,y-2,3,3,"#517d7b");
+      return;
+    }
+    if(o.type==="dummy"){
+      pix(g,x-8,y+1,17,3,"#879d75");
+      pix(g,x-1,y-18,3,19,"#55405c");
+      pix(g,x,y-17,1,16,"#b68a74");
+      pix(g,x-8,y-12,17,3,"#6a4c60");
+      pix(g,x-7,y-14,14,9,o.flash>0?"#f6e7c3":"#b88c75");
+      pix(g,x-7,y-14,14,2,"#e3c69c");
+      pix(g,x-3,y-21,8,7,"#b39280");
+      pix(g,x-2,y-20,6,2,"#e9d19f");
+      pix(g,x-1,y-11,4,5,"#634a64");
+      pix(g,x,y-10,2,3,"#ddc497");
+    }else{
+      pix(g,x-11,y+1,22,3,"#859c78");
+      const dark="#403253",branch=o.flash>0?"#e1d4aa":"#576471";
+      for(let i=0;i<12;i++){
+        const px=x-11+(i*7%23),py=y-3-(i*5%10);
+        pix(g,px,py,6,4,i%3===0?dark:branch);
+        if(i%2)pix(g,px+2,py-4,2,5,"#564063");
+        if(i%3===0)pix(g,px+1,py-5,2,2,"#d0bd9a");
+      }
+      if(o.flash>0)pix(g,x-3,y-13,6,3,"#f0e2b5");
+    }
+  }
+
+  function drawSword(g){
+    const p=clamp(sword.elapsed/sword.duration,0,1);
+    const final=sword.step===3;
+    const base=sword.facing;
+    const offset=sword.step===2?1.75:-1.75;
+    const sweep=sword.step===2?-3.45:(final?3.7:3.2);
+    const angle=base+offset+p*sweep;
+    const reach=final?34:26;
+    const handX=player.x,handY=player.y-14;
+    // Discrete arc samples create a chunky pixel-art trail rather than a vector swoosh.
+    for(let j=15;j>=0;j--){
+      const q=clamp(p-j*(final?.013:.018),0,1);
+      if(p-q>.34)continue;
+      const theta=base+offset+q*sweep;
+      const fade=j/15;
+      const r=reach-(j%3===0?0:2);
+      g.globalAlpha=(1-fade)*(.85-Math.abs(p-.5)*.45);
+      pix(g,handX+Math.cos(theta)*r-2,handY+Math.sin(theta)*r*.80-1,
+        final?4:3,final?3:2,j<5?"#faf4d7":j<11?"#c7dde0":"#92b3b9");
+    }
+    g.globalAlpha=1;
+    // The blade itself moves through the arc in stepped-pixel increments.
+    for(let r=7;r<=reach;r+=2){
+      const bx=handX+Math.cos(angle)*r,by=handY+Math.sin(angle)*r*.8;
+      pix(g,bx-1,by-1,r>reach-6?3:2,2,r>reach-6?"#fff5d9":"#c6d7d5");
+    }
+    const hX=handX+Math.cos(angle)*6,hY=handY+Math.sin(angle)*6*.8;
+    pix(g,hX-2,hY-2,5,3,"#d6ab77");
+    pix(g,handX+Math.cos(angle)*2,handY+Math.sin(angle)*2*.8,3,3,"#56415b");
+    if(final && p>.42 && p<.78){
+      const v=(p-.42)/.36;
+      g.globalAlpha=(1-v)*.8;
+      for(let i=0;i<18;i++){
+        const a=base+(i/17-.5)*2.9;
+        const x=player.x+Math.cos(a)*(21+v*26),y=player.y-7+Math.sin(a)*(14+v*17);
+        pix(g,x,y,3,2,i%2?"#f7e7ae":"#ccdce0");
+      }
+      g.globalAlpha=1;
     }
   }
 
