@@ -1389,10 +1389,17 @@
       if(underground!==null){
         e.x=clamp(e.x,51,366);e.y=clamp(e.y,56,246);
       }else if(e.type!=="ghost")collideTrees(e,e.r);
-      if(near && d<e.r+12 && e.cooldown<=0){
-        e.cooldown=e.type==="slime"?1.5:e.type==="ghost"?1.2:.94;
-        damagePlayer(1,e.x,e.y);
+      if(near && d<e.r+12){
+        if(e.type==="slime"){
+          if(e.hitTimer<=0 && e.charge>0){
+            e.hitTimer=1.4;damagePlayer(1,e.x,e.y);
+          }
+        }else if(e.cooldown<=0){
+          e.cooldown=e.type==="ghost"?1.2:.94;
+          damagePlayer(1,e.x,e.y);
+        }
       }
+      e.hitTimer=Math.max(0,e.hitTimer-dt);
     }
     if(underground===null)updateBoss(dt);
     updateBolts(dt);
@@ -1404,7 +1411,10 @@
     const d=Math.max(1,Math.hypot(dx,dy));
     const engaged=d<boss.arena;
     bossBar.hidden=!engaged;
-    if(engaged)bossFill.style.width=Math.round(boss.hp/boss.maxHp*100)+"%";
+    if(engaged){
+      bossFill.style.width=Math.round(boss.hp/boss.maxHp*100)+"%";
+      if(areaLabel.textContent!=="THE MIRE KING'S BOG")areaLabel.textContent="THE MIRE KING'S BOG";
+    }else if(areaLabel.textContent==="THE MIRE KING'S BOG")areaLabel.textContent="SUNLIT MEADOW";
     if(!engaged)return;
     boss.cooldown-=dt;boss.spawnTimer-=dt;
     if(boss.windup>0){
