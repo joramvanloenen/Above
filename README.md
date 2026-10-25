@@ -53,11 +53,13 @@ Each area uses its own enemy type: **71 roaming enemies across the five biomes**
 - The camera can move freely while fog remains **anchored in world coordinates**; simulation cells are preserved when the viewport shifts and reset only on resize or entering/leaving a crypt.
 - Runs in Canvas 2D without WebGL, external shaders, downloadable assets or additional dependencies. Main simulation: `fog.js`. GPU height volume: `volumetric.js`.
 
-## Height-volume fog rendering
+## Integrated volumetric fog compositing
 
-The preferred rendering path is now **WebGL ray-marched volumetric fog**, not just a stretched 2D opacity sheet. A small 2D velocity/density fluid grid still reacts to the knight, dog, sheep and enemies, but the GPU samples that density throughout a **30-world-unit-high atmospheric volume**. Nine vertically separated ray samples build Beer–Lambert extinction and scattered light; animated **3D noise** creates cloud bodies that change with height rather than sliding a flat mask. Directional self-shadowing gives shaded billows and warmer illuminated edges, while a tilted sampling ray makes higher clouds parallax against lower layers. Each biome inherits its existing fog density and crypts receive cooler lighting.
+Fog no longer appears as a translucent image pasted above the artwork. On WebGL-capable devices, **the complete rendered scene is fed into an opaque postprocess** along with two other textures: the existing low-resolution fluid density and an approximate **object-height mask** for the knight, dog, sheep, enemies, boss, trees, entrances and props.
 
-Fog uses a **separate smoothly filtered WebGL canvas layer** so the pixel-art canvas can remain crisp without imprinting large square pixels on cloud edges. It renders at 85% of the low-resolution game canvas and is upsampled smoothly. The low-resolution fluid remains on its original fixed 15 Hz schedule, and the GPU volume animates continuously between those updates. WebGL-unavailable devices retain the existing Canvas 2D interpolated-fog fallback. This is a height-based volumetric effect adapted to the game's oblique top-down view, not a fully depth-aware 3D renderer.
+The shader marches **12 samples through a 38-unit-high volume** with continuously animated three-dimensional cloud noise. It integrates **Beer–Lambert extinction (transmission)** and approximate **directional single-scattered light**, including an upstream self-shadow sample. The final colour is computed in approximate linear light as **scene colour × transmission + scattered fog light** before returning to display space. Heavy fog therefore **attenuates scene contrast and light** rather than simply brightening or tinting everything equally. Above-ground silhouettes remain clearer, while their lower sections blend into mist because a surface-height mask stops rays at the visible object.
+
+Rendering uses **one scene composite per frame** directly on the game's low-resolution main canvas. The previous CSS fog overlay and duplicate front/back alpha passes have been removed. The world-space fluid still updates at 15 Hz and moving characters still stir it. This is an approximate height-field 2.5D volumetric renderer, not a full geometric 3D scene with exact per-pixel depth. Older devices without WebGL fall back to the original Canvas 2D fog.
 
 ## Fog resolution and hit-response fix
 
