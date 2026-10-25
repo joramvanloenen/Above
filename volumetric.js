@@ -53,7 +53,7 @@
         float detail=noise3(q*1.87+vec3(8.1,13.8,2.4));
         float cloud=smoothstep(.27,.67,large*.71+detail*.29);
         // Density is strong at ground and tapers over 30 world units.
-        float vertical=exp(-z*.067)*smoothstep(HEIGHT,HEIGHT-7.,z);
+        float vertical=exp(-z*.067)*(1.-smoothstep(HEIGHT-7.,HEIGHT,z));
         float density=flow*(.10+cloud*1.8)*vertical;
         // Low-cost directional self-shadow from an upstream 3D sample.
         float shadowNoise=noise3(q*.72+vec3(-.32,-.33,.57));
