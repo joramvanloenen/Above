@@ -1136,6 +1136,278 @@
     g.globalAlpha=1;
   }
 
+
+  function spawnAdventure(){
+    tombs.push({id:0,x:827,y:1090,name:"CRYPT OF ASH"},{id:1,x:356,y:363,name:"FORGOTTEN VAULT"},{id:2,x:1286,y:790,name:"WEEPING TOMB"});
+    const makeEnemy=(type,x,y,room=null)=>({
+      type,x,y,room,originX:x,originY:y,
+      hp:type==="bandit"?5:type==="ghost"?4:3,
+      maxHp:type==="bandit"?5:type==="ghost"?4:3,
+      r:type==="bandit"?8:7,dead:false,vx:0,vy:0,flash:0,
+      phase:rand(0,TAU),cooldown:rand(.7,2),attackTime:0,charge:0,
+      wander:rand(0,TAU),stun:0,hitTimer:0
+    });
+    for(const [x,y] of [[858,847],[746,1050],[495,583],[1038,947],[1326,854],[1268,487],[1562,913]])
+      enemies.push(makeEnemy("bandit",x,y));
+    for(const [x,y] of [[761,907],[907,912],[1195,935],[989,700],[1480,925],[1388,1099],[561,475],[1514,1144]])
+      enemies.push(makeEnemy("slime",x,y));
+    for(let room=0;room<3;room++){
+      for(let i=0;i<4+room;i++){
+        const x=85+(i%3)*114+rand(-12,12);
+        const y=90+Math.floor(i/3)*90+rand(-9,9);
+        enemies.push(makeEnemy("ghost",x,y,room));
+      }
+    }
+    for(let i=0;i<14;i++){
+      const a=i/14*TAU;
+      const radius=100+(i%3)*23;
+      mudPuddles.push({x:boss.x+Math.cos(a)*radius,y:boss.y+Math.sin(a)*radius*.85,r:12+i%4*4});
+    }
+    for(let room=0;room<3;room++){
+      for(let i=0;i<7;i++)cryptProps.push({room,x:64+(i%3)*131,y:86+Math.floor(i/3)*69,type:i%3===0?"coffin":i%3===1?"urn":"column"});
+    }
+  }
+
+  const inCurrentRoom=e=>underground===null?e.room===null:e.room===underground;
+  function nearestPortal(){
+    if(transitionLock>0)return null;
+    const focus=activeActor();
+    if(underground!==null){
+      return Math.hypot(focus.x-207,focus.y-247)<24?{exit:true}:null;
+    }
+    for(const entry of tombs)if(distance(focus,entry)<29)return entry;
+    return null;
+  }
+  function usePortal(p){
+    if(!p)return false;
+    transitionLock=.9;
+    currentInput=null;
+    sword.active=false;sword.step=0;sword.queued=false;
+    bolts.length=0;
+    if(p.exit){
+      const ret=entranceReturn||{x:684,y:820};
+      underground=null;
+      player.x=ret.x+23;player.y=ret.y+30;
+      dog.x=player.x-14;dog.y=player.y+10;
+      areaLabel.textContent="SUNLIT MEADOW";
+      showNotice("BACK IN DAYLIGHT","The woodland welcomes you home.",3.4);
+    }else{
+      entranceReturn={x:p.x,y:p.y};
+      underground=p.id;
+      player.x=207;player.y=220;dog.x=192;dog.y=226;
+      player.face="up";player.angle=-Math.PI/2;
+      areaLabel.textContent=p.name;
+      showNotice(p.name,"Ancient dead stir below. Find the stairs to return to daylight.",5);
+    }
+    camX=activeActor().x-screenW/2;camY=activeActor().y-screenH/2;
+    return true;
+  }
+  function toggleWeapon(){
+    if(controlled!=="knight")return;
+    weapon=weapon==="sword"?"crossbow":"sword";
+    sword.active=false;sword.step=0;sword.queued=false;
+    weaponButton.dataset.weapon=weapon;
+    weaponLabel.textContent=weapon==="crossbow"?"BOW":"SWORD";
+    weaponButton.querySelector(".weapon-glyph").textContent=weapon==="crossbow"?"➶":"⚔";
+    actionIcon.innerHTML=weapon==="crossbow"?bowIconMarkup:swordIconMarkup;
+    updateActionLabel();
+  }
+  function healthRefresh(){
+    heartsLabel.textContent="♥ ".repeat(health).trim()+(" ♡".repeat(maxHealth-health));
+  }
+  function damagePlayer(amount,sourceX,sourceY){
+    if(invincible>0||health<=0)return;
+    invincible=1.15;
+    health=Math.max(0,health-amount);healthRefresh();
+    addParticles(player.x,player.y-10,"#df9c9c",10);
+    if(health>0){
+      showNotice("OUCH!","Watch enemy attacks. Keep moving and time your strikes.",2);
+      sound("impact");
+    }else{
+      showNotice("BACK TO THE CAMP","Your knight wakes safely beside the stone circle.",5);
+      health=maxHealth;healthRefresh();
+      underground=null;entranceReturn=null;
+      player.x=680;player.y=821;dog.x=667;dog.y=837;
+      invincible=2.2;sword.active=false;sword.step=0;
+      bolts.length=0;areaLabel.textContent="SUNLIT MEADOW";
+      camX=player.x-screenW/2;camY=player.y-screenH/2;
+    }
+  }
+  function hurtEnemy(e,damage,dx,dy){
+    if(e.dead)return;
+    e.hp=Math.max(0,e.hp-damage);e.flash=.23;e.stun=e.type==="boss"?.15:.29;
+    e.vx+=dx*(e.type==="boss"?5:13);e.vy+=dy*(e.type==="boss"?5:13);
+    addParticles(e.x,e.y-8,e.type==="ghost"?"#a4e4d3":e.type==="slime"?"#b9da86":"#e6b994",7);
+    sound("impact");
+    if(e.hp<=0){
+      e.dead=true;
+      addParticles(e.x,e.y-8,e.type==="boss"?"#d3b38c":"#d8c5a1",e.type==="boss"?56:15);
+      if(e.type==="boss"){
+        bossBar.hidden=true;
+        showNotice("THE MIRE KING HAS FALLEN","The forest is safe again — but the tombs still hold their secrets.",12);
+        victoryNotice=true;
+      }
+    }
+  }
+  function selectBowAim(){
+    const origin=player,a=player.angle;
+    let target=null,best=Infinity;
+    for(const e of enemies.concat([boss])){
+      if(e.dead||!inCurrentRoom(e))continue;
+      const dx=e.x-origin.x,dy=e.y-origin.y,d=Math.hypot(dx,dy);
+      if(d>175||d<3)continue;
+      const angle=Math.atan2(dy,dx);
+      const diff=Math.abs(Math.atan2(Math.sin(angle-a),Math.cos(angle-a)));
+      if(diff>.92)continue;
+      const score=d+diff*63;
+      if(score<best){best=score;target=e;}
+    }
+    return target?Math.atan2(target.y-origin.y,target.x-origin.x):a;
+  }
+  function shootCrossbow(){
+    if(time-lastShot<.58)return;
+    lastShot=time;
+    const a=selectBowAim();
+    bolts.push({x:player.x+Math.cos(a)*11,y:player.y-10+Math.sin(a)*11,
+      vx:Math.cos(a)*205,vy:Math.sin(a)*205,life:1.4,room:underground,damage:2});
+    addParticles(player.x+Math.cos(a)*12,player.y-9+Math.sin(a)*12,"#f4e9c4",5);
+    sound("slash");
+  }
+  function updateBolts(dt){
+    for(let i=bolts.length-1;i>=0;i--){
+      const b=bolts[i];b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
+      let hit=false;
+      if(underground!==null &&
+        (b.x<tombRect.x+9||b.x>tombRect.x+tombRect.w-9||b.y<tombRect.y+10||b.y>tombRect.y+tombRect.h-10))hit=true;
+      if(!hit){
+        for(const e of enemies.concat([boss])){
+          if(e.dead||!inCurrentRoom(e))continue;
+          if(Math.hypot(e.x-b.x,(e.y-8)-b.y)<e.r+7){
+            const len=Math.hypot(b.vx,b.vy)||1;
+            hurtEnemy(e,b.damage,b.vx/len,b.vy/len);
+            hit=true;break;
+          }
+        }
+      }
+      if(!hit && underground===null){
+        for(const o of obstacles){
+          if(o.broken||o.type==="dummy")continue;
+          if(Math.hypot(o.x-b.x,(o.y-6)-b.y)<12){
+            o.flash=.2;o.shake=.25;o.hp--;
+            if(o.hp<=0){o.broken=true;addParticles(o.x,o.y,"#719784",12);}
+            hit=true;break;
+          }
+        }
+      }
+      if(hit||b.life<=0){
+        if(hit)addParticles(b.x,b.y,"#e7d6ba",4);
+        bolts.splice(i,1);
+      }
+    }
+  }
+  function updateEnemies(dt){
+    if(invincible>0)invincible=Math.max(0,invincible-dt);
+    if(transitionLock>0)transitionLock=Math.max(0,transitionLock-dt);
+    for(const e of enemies){
+      if(e.dead||!inCurrentRoom(e))continue;
+      e.phase+=dt;e.flash=Math.max(0,e.flash-dt);
+      e.stun=Math.max(0,e.stun-dt);e.cooldown-=dt;
+      const dx=player.x-e.x,dy=player.y-e.y,d=Math.max(1,Math.hypot(dx,dy));
+      const detect=e.type==="ghost"?140:e.type==="bandit"?95:75;
+      const speed=e.type==="ghost"?20:e.type==="bandit"?22:14;
+      const near=d<detect;
+      let vx=0,vy=0;
+      if(e.stun<=0 && near){
+        if(e.type==="slime"){
+          if(e.cooldown<=0){
+            e.cooldown=rand(1,1.7);
+            e.charge=.35;
+            e.vx=dx/d*62;e.vy=dy/d*62;
+          }
+          if(e.charge>0){
+            e.charge=Math.max(0,e.charge-dt);
+            vx=e.vx;vy=e.vy;
+          }
+        }else {
+          const approach=e.type==="bandit"?d>19:d>13;
+          if(approach){vx=dx/d*speed;vy=dy/d*speed;}
+        }
+      }else if(e.stun<=0 && e.type!=="ghost"){
+        // Small idle patrol instead of stationary enemies.
+        e.wander+=dt*.46;
+        if(Math.hypot(e.x-e.originX,e.y-e.originY)>30){
+          vx=(e.originX-e.x)*.8;vy=(e.originY-e.y)*.8;
+        }else{vx=Math.cos(e.wander)*3;vy=Math.sin(e.wander)*3;}
+      }else if(e.stun<=0 && e.type==="ghost"){
+        vx=Math.cos(e.phase*.7)*3;vy=Math.sin(e.phase*.65)*3;
+      }
+      e.x+=vx*dt;e.y+=vy*dt;
+      e.x+=e.vx*dt*(e.stun>0?.9:0);
+      e.y+=e.vy*dt*(e.stun>0?.9:0);
+      if(e.stun>0){e.vx*=Math.exp(-dt*9);e.vy*=Math.exp(-dt*9);}
+      if(underground!==null){
+        e.x=clamp(e.x,51,366);e.y=clamp(e.y,56,246);
+      }else if(e.type!=="ghost")collideTrees(e,e.r);
+      if(near && d<e.r+12 && e.cooldown<=0){
+        e.cooldown=e.type==="slime"?1.5:e.type==="ghost"?1.2:.94;
+        damagePlayer(1,e.x,e.y);
+      }
+    }
+    if(underground===null)updateBoss(dt);
+    updateBolts(dt);
+  }
+  function updateBoss(dt){
+    if(boss.dead)return;
+    boss.phase+=dt;boss.flash=Math.max(0,boss.flash-dt);boss.stun=Math.max(0,boss.stun-dt);
+    const dx=player.x-boss.x,dy=player.y-boss.y;
+    const d=Math.max(1,Math.hypot(dx,dy));
+    const engaged=d<boss.arena;
+    bossBar.hidden=!engaged;
+    if(engaged)bossFill.style.width=Math.round(boss.hp/boss.maxHp*100)+"%";
+    if(!engaged)return;
+    boss.cooldown-=dt;boss.spawnTimer-=dt;
+    if(boss.windup>0){
+      boss.windup-=dt;
+      if(boss.windup<=0){
+        boss.charge=.48;
+        boss.vx=dx/d*(boss.hp<24?91:75);
+        boss.vy=dy/d*(boss.hp<24?91:75);
+        sound("impact");
+      }
+    }else if(boss.charge>0){
+      boss.charge-=dt;
+      boss.x+=boss.vx*dt;boss.y+=boss.vy*dt;
+      if(d<boss.r+13 && boss.hitTimer<=0){
+        boss.hitTimer=.8;
+        damagePlayer(1,boss.x,boss.y);
+      }
+    }else{
+      boss.x+=dx/d*10*dt;boss.y+=dy/d*10*dt;
+      if(boss.cooldown<=0){
+        boss.windup=.8;boss.cooldown=boss.hp<24?2.2:3.1;
+        addParticles(boss.x,boss.y,"#d7b184",6);
+      }
+    }
+    boss.hitTimer=Math.max(0,boss.hitTimer-dt);
+    if(boss.hp<24 && boss.spawnTimer<=0){
+      boss.spawnTimer=10;
+      for(let j=0;j<2;j++){
+        const a=rand(0,TAU);
+        enemies.push({type:"slime",x:boss.x+Math.cos(a)*33,y:boss.y+Math.sin(a)*33,
+          room:null,originX:boss.x,originY:boss.y,hp:3,maxHp:3,r:7,dead:false,
+          vx:0,vy:0,flash:0,phase:rand(0,TAU),cooldown:1,attackTime:0,
+          charge:0,wander:rand(0,TAU),stun:0,hitTimer:0});
+      }
+    }
+  }
+  function constrainCryptActors(){
+    if(underground===null)return;
+    for(const entity of [player,dog]){
+      entity.x=clamp(entity.x,tombRect.x+12,tombRect.x+tombRect.w-12);
+      entity.y=clamp(entity.y,tombRect.y+15,tombRect.y+tombRect.h-15);
+    }
+  }
+
   function drawWorld(){
     // Snap camera to integer world pixels to preserve crisp, stable nearest-neighbour pixels.
     const cx=Math.round(camX),cy=Math.round(camY);
