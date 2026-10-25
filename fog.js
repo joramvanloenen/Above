@@ -19,6 +19,9 @@
       this.clock = 0;
       this.accumulator = 0;
       this.stepSeconds = 1 / 15;
+      // Fluid physics stays cheap while fog is rasterized four times finer in
+      // each direction (16x as many rendered samples, only once per tick).
+      this.renderScale = 4;
       this.canvas = document.createElement("canvas");
       this.ctx = this.canvas.getContext("2d", {willReadFrequently: false});
       // Previous density texture crossfades into each 15Hz fluid step.
@@ -33,7 +36,7 @@
 
     configure(viewW, viewH, camX, camY, room) {
       // Capped grid density even for high-resolution landscape devices.
-      const cell = Math.max(7, Math.ceil(Math.max(viewW / 92, viewH / 72)));
+      const cell = Math.max(5, Math.ceil(Math.max(viewW / 90, viewH / 66)));
       const cols = Math.ceil(viewW / cell) + 8;
       const rows = Math.ceil(viewH / cell) + 8;
       if (this.cols !== cols || this.rows !== rows || this.cell !== cell || this.room !== room) {
@@ -51,12 +54,14 @@
         this.div = new Float32Array(n);
         this.p = new Float32Array(n);
         this.p2 = new Float32Array(n);
-        this.canvas.width = cols;
-        this.canvas.height = rows;
-        this.previousCanvas.width = cols;
-        this.previousCanvas.height = rows;
+        const pixelW = cols * this.renderScale;
+        const pixelH = rows * this.renderScale;
+        this.canvas.width = pixelW;
+        this.canvas.height = pixelH;
+        this.previousCanvas.width = pixelW;
+        this.previousCanvas.height = pixelH;
         this.previousValid = false;
-        this.image = this.ctx.createImageData(cols, rows);
+        this.image = this.ctx.createImageData(pixelW, pixelH);
         this.ox = Math.floor(camX / cell) - 4;
         this.oy = Math.floor(camY / cell) - 4;
         this.accumulator = 0;
@@ -261,28 +266,59 @@
       [this.v,this.nv]=[this.nv,this.v];
     }
 
+    // Smooth cubic reconstruction of the fluid density grid. This avoids
+    // visible square tiles even though fluid velocities stay low-resolution.
+    cubic(a,b,c,d,t) {
+      const t2=t*t, t3=t2*t;
+      return b + .5*t*(c-a + t*(2*a-5*b+4*c-d + t*(-a+3*b-3*c+d)));
+    }
+
+    densityAt(x,y) {
+      const w=this.cols,h=this.rows,d=this.d;
+      const ix=Math.floor(x),iy=Math.floor(y),tx=x-ix,ty=y-iy;
+      const x0=Math.max(0,ix-1),x1=Math.max(0,Math.min(w-1,ix));
+      const x2=Math.max(0,Math.min(w-1,ix+1)),x3=Math.max(0,Math.min(w-1,ix+2));
+      const y0=Math.max(0,iy-1),y1=Math.max(0,Math.min(h-1,iy));
+      const y2=Math.max(0,Math.min(h-1,iy+1)),y3=Math.max(0,Math.min(h-1,iy+2));
+      const a=y0*w,b=y1*w,c=y2*w,e=y3*w;
+      const a0=this.cubic(d[a+x0],d[a+x1],d[a+x2],d[a+x3],tx);
+      const a1=this.cubic(d[b+x0],d[b+x1],d[b+x2],d[b+x3],tx);
+      const a2=this.cubic(d[c+x0],d[c+x1],d[c+x2],d[c+x3],tx);
+      const a3=this.cubic(d[e+x0],d[e+x1],d[e+x2],d[e+x3],tx);
+      return Math.max(0,Math.min(1,this.cubic(a0,a1,a2,a3,ty)));
+    }
+
     renderTexture() {
       if(!this.image)return;
-      const data=this.image.data,w=this.cols,cell=this.cell;
-      for(let i=0;i<this.d.length;i++){
-        const x=i%w,y=(i/w)|0;
-        const wx=(this.ox+x+.5)*cell,wy=(this.oy+y+.5)*cell;
-        const region=this.room===null?this.biomeAt(wx,wy):"crypt";
-        const d=this.d[i],o=i*4;
-        // Height proxy: diffuse base + bright crests + darker recessed folds.
-        const fold=Math.sin(wx*.018+wy*.010+this.clock*.24)
-          *Math.cos(wy*.022-wx*.007-this.clock*.18);
-        const shade=fold*18+6*(.5-d);
-        let r=184,g=205,b=196;
-        if(region==="mire"){r=181;g=202;b=183;}
-        else if(region==="twilight"){r=198;g=188;b=212;}
-        else if(region==="highlands"){r=215;g=208;b=195;}
-        else if(region==="forest"){r=171;g=197;b=188;}
-        else if(region==="crypt"){r=177;g=204;b=215;}
-        data[o]=Math.max(0,Math.min(255,r+shade));
-        data[o+1]=Math.max(0,Math.min(255,g+shade));
-        data[o+2]=Math.max(0,Math.min(255,b+shade));
-        data[o+3]=Math.min(235,Math.round(Math.pow(d,.82)*255));
+      const data=this.image.data;
+      const scale=this.renderScale, cols=this.cols, cell=this.cell;
+      const pixelW=this.canvas.width,pixelH=this.canvas.height;
+      for(let y=0;y<pixelH;y++) {
+        const gy=(y+.5)/scale-.5;
+        const wy=(this.oy+(y+.5)/scale)*cell;
+        for(let x=0;x<pixelW;x++) {
+          const gx=(x+.5)/scale-.5;
+          const wx=(this.ox+(x+.5)/scale)*cell;
+          const region=this.room===null?this.biomeAt(wx,wy):"crypt";
+          const d=this.densityAt(gx,gy),o=(y*pixelW+x)*4;
+          // Continuous fine-scale cloud detail fills the reconstructed field
+          // without introducing extra fluid cells or random per-frame noise.
+          const fold=Math.sin(wx*.021+wy*.010+this.clock*.17)
+            *Math.cos(wy*.024-wx*.009-this.clock*.12);
+          const fine=Math.sin(wx*.043+wy*.027-this.clock*.23)
+            *Math.cos(wy*.031+wx*.017+this.clock*.14);
+          const shade=fold*13+fine*5+4*(.5-d);
+          let r=184,g=205,b=196;
+          if(region==="mire"){r=181;g=202;b=183;}
+          else if(region==="twilight"){r=198;g=188;b=212;}
+          else if(region==="highlands"){r=215;g=208;b=195;}
+          else if(region==="forest"){r=171;g=197;b=188;}
+          else if(region==="crypt"){r=177;g=204;b=215;}
+          data[o]=Math.max(0,Math.min(255,r+shade));
+          data[o+1]=Math.max(0,Math.min(255,g+shade));
+          data[o+2]=Math.max(0,Math.min(255,b+shade));
+          data[o+3]=Math.min(242,Math.round(Math.pow(d,.83)*250));
+        }
       }
       this.ctx.putImageData(this.image,0,0);
     }
@@ -304,7 +340,7 @@
       if(shifted)this.renderTexture();
       this.previousOx=this.ox;
       this.previousOy=this.oy;
-      this.previousCtx.clearRect(0,0,this.cols,this.rows);
+      this.previousCtx.clearRect(0,0,this.previousCanvas.width,this.previousCanvas.height);
       this.previousCtx.drawImage(this.canvas,0,0);
       this.previousValid=true;
       this.stirActors(scene);
