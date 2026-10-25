@@ -51,7 +51,13 @@ Each area uses its own enemy type: **71 roaming enemies across the five biomes**
 - The simulation runs at a fixed **15 Hz**, independently of drawing frame rate. Its grid scales to the viewport at approximately 12 world pixels per cell and reuses typed arrays, pixel buffers and a single cached canvas.
 - The low-resolution fog texture is bilinearly interpolated into the pixel-art world in **two translucent depth passes**: heavier at ground level below characters, lighter drifting wisps in front. HUD and movement controls stay sharp and legible.
 - The camera can move freely while fog remains **anchored in world coordinates**; simulation cells are preserved when the viewport shifts and reset only on resize or entering/leaving a crypt.
-- Runs in Canvas 2D without WebGL, external shaders, downloadable assets or additional dependencies. Main implementation: `fog.js`.
+- Runs in Canvas 2D without WebGL, external shaders, downloadable assets or additional dependencies. Main simulation: `fog.js`. GPU height volume: `volumetric.js`.
+
+## Height-volume fog rendering
+
+The preferred rendering path is now **WebGL ray-marched volumetric fog**, not just a stretched 2D opacity sheet. A small 2D velocity/density fluid grid still reacts to the knight, dog, sheep and enemies, but the GPU samples that density throughout a **30-world-unit-high atmospheric volume**. Nine vertically separated ray samples build Beer–Lambert extinction and scattered light; animated **3D noise** creates cloud bodies that change with height rather than sliding a flat mask. Directional self-shadowing gives shaded billows and warmer illuminated edges, while a tilted sampling ray makes higher clouds parallax against lower layers. Each biome inherits its existing fog density and crypts receive cooler lighting.
+
+Fog uses a **separate smoothly filtered WebGL canvas layer** so the pixel-art canvas can remain crisp without imprinting large square pixels on cloud edges. It renders at 85% of the low-resolution game canvas and is upsampled smoothly. The low-resolution fluid remains on its original fixed 15 Hz schedule, and the GPU volume animates continuously between those updates. WebGL-unavailable devices retain the existing Canvas 2D interpolated-fog fallback. This is a height-based volumetric effect adapted to the game's oblique top-down view, not a fully depth-aware 3D renderer.
 
 ## Fog resolution and hit-response fix
 
