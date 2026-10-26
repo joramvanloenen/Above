@@ -845,7 +845,7 @@
   }
 
   function hitSwordTargets() {
-    const radius=(sword.step===3?47:35)*OBJECT_SCALE;
+    const radius=(sword.step===3?37:29)*OBJECT_SCALE;
     const cone=sword.step===3?1.65:1.29;
     let found=false;
     for(const o of obstacles){
@@ -896,8 +896,8 @@
     // quick slashes still land almost immediately after a tap.
     if(!sword.hit && sword.elapsed>=sword.duration*(sword.step===3?.43:.27)){
       sword.hit=true;hitSwordTargets();
-      if(sword.step===3)addParticles(player.x+Math.cos(sword.facing)*25,
-        player.y+Math.sin(sword.facing)*20-8,"#e8dbc6",10);
+      if(sword.step===3)addParticles(player.x+Math.cos(sword.facing)*17,
+        player.y+Math.sin(sword.facing)*14-8,"#e8dbc6",10);
     }
     // Skip the tail of recovery when the next combo tap is buffered.
     if(sword.hit && sword.queued>0 && sword.step<3 && sword.elapsed>=sword.duration*.72){
@@ -1257,6 +1257,13 @@
   }
 
   function drawSword(g){
+    // The rig was drawn at oversized weapon-concept proportions.
+    // Scale the WHOLE shoulder/hand/blade/trail around the knight's chest so
+    // the physical grip stays attached and all three strikes stay consistent.
+    g.save();
+    g.translate(player.x,player.y-14);
+    g.scale(.55,.55);
+    g.translate(-player.x,-player.y+14);
     const p=clamp(sword.elapsed/sword.duration,0,1);
     const pose=swordPoseAt(p);
     drawSwordTrail(g,p);
@@ -1302,6 +1309,7 @@
     pix(g,hx-3,hy-3,7,6,"#40334b");
     pix(g,hx-2,hy-3,5,4,"#c6d0c8");
     pix(g,hx,hy-1,3,2,"#718d98");
+    g.restore();
   }
 
   function drawBark(g){
