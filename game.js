@@ -116,6 +116,7 @@
   }
 
   let screenW=0,screenH=0,camX=0,camY=0,time=0,last=0;
+  let cameraVX=0,cameraVY=0,cameraLookX=0,cameraLookY=0;
   let barkTime=-10, noticeTimer=0, ringGlow=0, win=false, homed=0;
   let damageFlash=0;
   // The knight starts under player control; both characters always exist in the world.
@@ -146,15 +147,57 @@
   const mistScene={player,dog,sheep,enemies,boss};
   let mist=null;
 
-  function resize() {
-    screenW = Math.max(105,Math.ceil(innerWidth / SCALE));
-    screenH = Math.max(105,Math.ceil(innerHeight / SCALE));
-    canvas.width=screenW; canvas.height=screenH;
-    ctx.imageSmoothingEnabled=false;
+  function resetCamera() {
     const focus=activeActor();
-    camX=clamp(focus.x-screenW/2,0,W-screenW);
-    camY=clamp(focus.y-screenH/2,0,H-screenH);
+    const width=underground===null?W:420, height=underground===null?H:300;
+    camX=clamp(focus.x-screenW/2,0,Math.max(0,width-screenW));
+    camY=clamp(focus.y-screenH/2,0,Math.max(0,height-screenH));
+    cameraVX=0;cameraVY=0;cameraLookX=0;cameraLookY=0;
   }
+
+  function resize() {
+    screenW=Math.max(105,Math.ceil(innerWidth/SCALE));
+    screenH=Math.max(105,Math.ceil(innerHeight/SCALE));
+    // Render at full CSS-pixel resolution, while logical world pixels remain
+    // SCALE screen pixels wide. This permits 1/SCALE world-pixel camera steps
+    // with nearest-neighbor sampling and no texture interpolation.
+    canvas.width=screenW*SCALE;
+    canvas.height=screenH*SCALE;
+    ctx.setTransform(SCALE,0,0,SCALE,0,0);
+    ctx.imageSmoothingEnabled=false;
+    resetCamera();
+    if(mist)mist.reset(screenW,screenH,camX,camY,underground);
+  }
+
+  function updateCamera(dt) {
+    const focus=activeActor();
+    const look=focus.moving>.05?11*focus.moving:0;
+    const follow=1-Math.exp(-dt*7);
+    cameraLookX=lerp(cameraLookX,Math.cos(focus.angle)*look,follow);
+    cameraLookY=lerp(cameraLookY,Math.sin(focus.angle)*look,follow);
+    const width=underground===null?W:420,height=underground===null?H:300;
+    const maxX=Math.max(0,width-screenW),maxY=Math.max(0,height-screenH);
+    const targetX=clamp(focus.x+cameraLookX-screenW/2,0,maxX);
+    const targetY=clamp(focus.y+cameraLookY-screenH/2,0,maxY);
+    // Critically damped spring: stable when the frame rate varies,
+    // smoothly follows diagonal motion, and never oscillates at the edges.
+    const omega=2/.20;
+    const decay=Math.exp(-omega*dt);
+    const errorX=camX-targetX,errorY=camY-targetY;
+    const bx=(cameraVX+omega*errorX)*dt;
+    const by=(cameraVY+omega*errorY)*dt;
+    const nextX=targetX+(errorX+bx)*decay;
+    const nextY=targetY+(errorY+by)*decay;
+    cameraVX=(cameraVX-omega*bx)*decay;
+    cameraVY=(cameraVY-omega*by)*decay;
+    camX=clamp(nextX,0,maxX);
+    camY=clamp(nextY,0,maxY);
+    if(camX!==nextX)cameraVX=0;
+    if(camY!==nextY)cameraVY=0;
+  }
+
+  function renderCameraX(){return Math.round(camX*SCALE)/SCALE;}
+  function renderCameraY(){return Math.round(camY*SCALE)/SCALE;}
 
   function noisePatch(g,cx,cy,rx,ry,col,opacity=1) {
     g.fillStyle=col; g.globalAlpha=opacity;
@@ -1322,7 +1365,7 @@
       areaLabel.textContent=p.name;
       showNotice(p.name,"Ancient dead stir below. Find the stairs to return to daylight.",5);
     }
-    camX=activeActor().x-screenW/2;camY=activeActor().y-screenH/2;
+    resetCamera();
     return true;
   }
   function toggleWeapon(){
@@ -1356,7 +1399,7 @@
       player.x=680;player.y=821;dog.x=667;dog.y=837;
       invincible=2.2;sword.active=false;sword.step=0;
       bolts.length=0;areaLabel.textContent=biomeLabel(player.x,player.y);
-      camX=player.x-screenW/2;camY=player.y-screenH/2;
+      resetCamera();
     }
   }
   function hurtEnemy(e,damage,dx,dy){
@@ -1764,7 +1807,7 @@
   }
 
   function drawCrypt(){
-    const cx=Math.round(camX),cy=Math.round(camY);
+    const cx=renderCameraX(),cy=renderCameraY();
     ctx.fillStyle="#252737";ctx.fillRect(0,0,screenW,screenH);
     ctx.save();ctx.translate(-cx,-cy);
     drawCryptBackdrop(ctx);
@@ -1786,11 +1829,14 @@
 
   function drawWorld(){
     if(underground!==null){drawCrypt();return;}
-    // Snap camera to integer world pixels to preserve crisp, stable nearest-neighbour pixels.
-    const cx=Math.round(camX),cy=Math.round(camY);
+    // Round the render offset to a physical screen pixel (1/SCALE world unit).
+    // Crop the ground on whole source pixels so nearest-neighbor sampling
+    // never blends texels, even during fractional world-camera movement.
+    const cx=renderCameraX(),cy=renderCameraY();
     ctx.fillStyle=PAL.grass;ctx.fillRect(0,0,screenW,screenH);
-    const w=Math.min(screenW,W-cx),h=Math.min(screenH,H-cy);
-    if(w>0&&h>0)ctx.drawImage(bg,cx,cy,w,h,0,0,w,h);
+    const sx=Math.max(0,Math.floor(cx)),sy=Math.max(0,Math.floor(cy));
+    const w=Math.min(screenW+2,W-sx),h=Math.min(screenH+2,H-sy);
+    if(w>0&&h>0)ctx.drawImage(bg,sx,sy,w,h,sx-cx,sy-cy,w,h);
     ctx.save();ctx.translate(-cx,-cy);
     for(const f of flowers){
       if(f.x<cx-3||f.x>cx+screenW+3||f.y<cy-3||f.y>cy+screenH+3)continue;
@@ -1864,11 +1910,7 @@
       const region=biomeLabel(activeActor().x,activeActor().y);
       if(areaLabel.textContent!==region)areaLabel.textContent=region;
     }
-    const ease=1-Math.exp(-dt*4.5);
-    const focus=activeActor();
-    const width=underground===null?W:420,height=underground===null?H:300;
-    camX=clamp(lerp(camX,focus.x-screenW/2,ease),0,Math.max(0,width-screenW));
-    camY=clamp(lerp(camY,focus.y-screenH/2,ease),0,Math.max(0,height-screenH));
+    updateCamera(dt);
     mist.update(dt,camX,camY,underground,screenW,screenH,mistScene);
     drawWorld();
     if(damageFlash>0){
