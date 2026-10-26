@@ -43,39 +43,22 @@ The overworld is now made up of **five connected, visually distinct biomes** rat
 
 Each area uses its own enemy type: **71 roaming enemies across the five biomes**, plus **15 ghosts underground** and the Mire King boss. The camp and crypt entrances have safer approach zones. The top HUD changes to show the current biome while exploring, and the character-switch, sword, crossbow, sheep, crypt and tree-fading systems continue to work as before.
 
-## Reactive ground fog
+## Drifting ground mist particles
 
-- The surface world and all three crypts now have **dynamic low-altitude fog**, strongest in the sinking mire and twilight grove, lighter in the forest and highlands, and thin in the starting meadow.
-- **Knight, dog, sheep, enemies, ghosts and the Mire King** push fog aside as they move. Actor motion injects directional wake and radial displacement into a persistent velocity field; mist flows back into the gaps over time.
-- Uses a **small world-space 2D fluid grid** (semi-Lagrangian density/velocity advection, three Jacobi pressure-projection iterations, density diffusion and ambient wind). It is a stylized *volumetric-looking approximation*, not hardware volumetric ray marching.
-- The simulation runs at a fixed **15 Hz**, independently of drawing frame rate. Its grid scales to the viewport at approximately 12 world pixels per cell and reuses typed arrays, pixel buffers and a single cached canvas.
-- The low-resolution fog texture is bilinearly interpolated into the pixel-art world in **two translucent depth passes**: heavier at ground level below characters, lighter drifting wisps in front. HUD and movement controls stay sharp and legible.
-- The camera can move freely while fog remains **anchored in world coordinates**; simulation cells are preserved when the viewport shifts and reset only on resize or entering/leaving a crypt.
-- Runs in Canvas 2D without WebGL, external shaders, downloadable assets or additional dependencies. Main simulation: `fog.js`. GPU height volume: `volumetric.js`.
+Above now uses **soft drifting sprite particles**, not fluid dynamics, volumetric raymarching or full-screen fog postprocessing.
 
-## Integrated volumetric fog compositing
+- Roughly **45–116 reusable mist puffs** are simulated near the camera, depending on viewport size.
+- Each puff uses a small, pre-generated soft cloud sprite. The particles slide gently across the ground, meander in the wind and remain in world coordinates while the camera moves.
+- **Biome-specific mist:** thin, warm mist in the meadow, cooler mist in the forest, denser greenish banks in the mire, pale wisps in the highlands, lavender mist in the twilight grove and cool blue-grey mist underground.
+- **Character reactions:** the knight, dog, sheep, roaming enemies, ghosts and the Mire King part the nearby particles and generate small trailing wakes as they move.
+- Mist is drawn in **two inexpensive particle layers**, behind and in front of the characters. The pixel-art scene remains sharp and the HUD is unaffected.
+- There are **no GPU shaders, volumetric canvas compositors, fluid grids, external dependencies or per-frame sprite allocations**. The old `fog.js` and `volumetric.js` implementations have been removed. Implementation: `mist.js`.
 
-Fog no longer appears as a translucent image pasted above the artwork. On WebGL-capable devices, **the complete rendered scene is fed into an opaque postprocess** along with two other textures: the existing low-resolution fluid density and an approximate **object-height mask** for the knight, dog, sheep, enemies, boss, trees, entrances and props.
+## Hit feedback and object scale
 
-The shader marches **12 samples through a 38-unit-high volume** with continuously animated three-dimensional cloud noise. It integrates **Beer–Lambert extinction (transmission)** and approximate **directional single-scattered light**, including an upstream self-shadow sample. The final colour is computed in approximate linear light as **scene colour × transmission + scattered fog light** before returning to display space. Heavy fog therefore **attenuates scene contrast and light** rather than simply brightening or tinting everything equally. Above-ground silhouettes remain clearer, while their lower sections blend into mist because a surface-height mask stops rays at the visible object.
-
-Rendering uses **one scene composite per frame** directly on the game's low-resolution main canvas. The previous CSS fog overlay and duplicate front/back alpha passes have been removed. The world-space fluid still updates at 15 Hz and moving characters still stir it. This is an approximate height-field 2.5D volumetric renderer, not a full geometric 3D scene with exact per-pixel depth. Older devices without WebGL fall back to the original Canvas 2D fog.
-
-## Fog resolution and hit-response fix
-
-- Fog physics remains lightweight at **15 Hz**, with roughly 5-pixel world-space fluid cells on portrait mobile screens. Each simulation cell is reconstructed into a **4 × 4 high-resolution fog texture** using bicubic density sampling (16× the render texels), for smooth detail without 16× the fluid cost.
-- Smooth temporal blending and camera-rebase alignment remain active; fine cloud folds provide detail above the fluid-grid resolution.
-- Enemy hit ranges now match their actual approach distances, especially bandits, ghosts and stone golems, so their attacks reliably connect when close enough.
-- Every confirmed hit immediately produces a **high-contrast full-screen red flash** with a white-red center and deeper red edges. A canvas-based tint provides a fallback in addition to the top-level screen overlay. The flash fades over approximately 0.6 seconds.
-- These changes preserve the 50% smaller sprites, sword/crossbow combat, enemy AI and crypt navigation.
-
-## Fog polish, hit feedback and object scale
-
-- The fog has **higher density**, strongest in the swamp and twilight grove, and uses a **finer ~7-world-pixel simulation grid** at common mobile viewport sizes, still updated at only **15 Hz**.
-- **Flicker correction:** camera grid rebases immediately refresh the aligned density texture. Two persistent fog canvases are smoothly blended between fixed simulation ticks to avoid the visible jump when a new low-resolution density frame arrives. No per-frame canvas allocation.
-- A short-lived **full-screen crimson damage vignette** flashes whenever an enemy damages the knight, then fades without blocking input.
-- **All foreground world sprites and props render at half their former size**, around their existing positions: knight, sheepdog, sheep, enemies, boss, trees, flowers, stones, shrines, entrances, training targets and crypt furniture. The world map and camera coordinates are not zoomed or rescaled. Collision radii and melee reach are adjusted for smaller physical sprites.
-- Terrain surfaces, masonry floors and landscape landmarks remain full-size world geometry, so the scene retains its overall layout.
+- Enemy attack reach matches movement stopping distances, so nearby hits register reliably.
+- Hits trigger a high-contrast **full-screen red flash** with a fading vignette and canvas fallback.
+- Characters, enemies, trees, and foreground props render at **half their original size**, keeping the world map and camera unchanged.
 
 ## Art direction
 
