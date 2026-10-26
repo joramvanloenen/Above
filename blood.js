@@ -30,7 +30,10 @@
       const fatal=!!options.fatal;
       const sourceHeight=options.sourceHeight??7;
       const x=victim.x, y=victim.y-2;
-      const shot={victim,x,y,dirX,dirY,room,
+      // Player respawns immediately after a fatal hit: freeze the wound at
+      // the original impact instead of dragging its emitter to camp.
+      const source=options.fixedSource?{x:victim.x,y:victim.y}:victim;
+      const shot={victim:source,x,y,dirX,dirY,room,
         sourceHeight,age:0,delay:0,remaining:fatal?2.5:1.05,
         volume:Math.min(2,amount),fatal};
       this.emitters.push(shot);
