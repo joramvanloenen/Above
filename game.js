@@ -1161,45 +1161,146 @@
     }
   }
 
-  function drawSword(g){
-    const p=clamp(sword.elapsed/sword.duration,0,1);
-    const final=sword.step===3;
-    const base=sword.facing;
-    const offset=sword.step===2?1.75:-1.75;
-    const sweep=sword.step===2?-3.45:(final?3.7:3.2);
-    const angle=base+offset+p*sweep;
-    const reach=final?34:26;
-    const handX=player.x,handY=player.y-14;
-    // Discrete arc samples create a chunky pixel-art trail rather than a vector swoosh.
-    for(let j=15;j>=0;j--){
-      const q=clamp(p-j*(final?.013:.018),0,1);
-      if(p-q>.34)continue;
-      const theta=base+offset+q*sweep;
-      const fade=j/15;
-      const r=reach-(j%3===0?0:2);
-      g.globalAlpha=(1-fade)*(.85-Math.abs(p-.5)*.45);
-      pix(g,handX+Math.cos(theta)*r-2,handY+Math.sin(theta)*r*.80-1,
-        final?4:3,final?3:2,j<5?"#faf4d7":j<11?"#c7dde0":"#92b3b9");
+  // Animated sword is rigged to the knight's off-center shoulder / hand, not
+  // the sprite origin. All dimensions are in unscaled sprite-space; the
+  // existing OBJECT_SCALE render wrapper keeps world and collision sizes intact.
+  const SWORD_STROKES=[
+    {start:-1.82,end:1.12,length:35},  // diagonal slash, high -> low
+    {start:1.72,end:-1.18,length:36},  // reversing backhand
+    {start:-2.50,end:.17,length:43}    // raised overhead finishing cleave
+  ];
+  const swingEase=x=>1-Math.pow(1-clamp(x,0,1),2.6);
+
+  function swordPoseAt(p){
+    const step=sword.step,style=SWORD_STROKES[step-1]||SWORD_STROKES[0];
+    const facing=sword.facing;
+    const u=clamp(p,0,1);
+    const windup=step===3?.21:.14;
+    const follow=step===3?.77:.74;
+    let angle,attack=0,extension=0;
+    if(u<windup){
+      const t=swingEase(u/windup);
+      angle=style.start-.22*(1-t);
+      extension=-3+3*t;
+    }else if(u<follow){
+      attack=swingEase((u-windup)/(follow-windup));
+      angle=lerp(style.start,style.end,attack);
+      extension=Math.sin(attack*Math.PI)*(step===3?10:4);
+    }else{
+      const recovery=(u-follow)/(1-follow);
+      angle=style.end+(step===3?.12:-.10)*recovery;
+      extension=-1.5*recovery;
+      attack=1;
+    }
+    const fx=Math.cos(facing),fy=Math.sin(facing);
+    const tx=-fy,ty=fx;
+    // One shoulder lies outside the armor; a small torso shift sells rotation.
+    const lean=Math.sin(attack*Math.PI)*(step===3?3.6:2.2);
+    const shoulderX=player.x+tx*7+fx*(1+lean);
+    const shoulderY=player.y-15+ty*4+fy*(1+lean)*.78;
+    const dirX=Math.cos(facing+angle),dirY=Math.sin(facing+angle)*.78;
+    const handX=shoulderX+dirX*7+fx*extension;
+    const handY=shoulderY+dirY*7+fy*extension*.78;
+    const elbowX=lerp(shoulderX,handX,.53)+tx*1.8;
+    const elbowY=lerp(shoulderY,handY,.53)+ty*1.3;
+    const bladeX=handX+dirX*style.length;
+    const bladeY=handY+dirY*style.length;
+    return {step,angle,attack,windup,follow,shoulderX,shoulderY,
+      elbowX,elbowY,handX,handY,dirX,dirY,bladeX,bladeY};
+  }
+
+  function drawSwordLine(g,x1,y1,x2,y2,color,size=2){
+    const length=Math.hypot(x2-x1,y2-y1);
+    const count=Math.max(1,Math.ceil(length*.92));
+    for(let i=0;i<=count;i++){
+      const t=i/count;
+      pix(g,lerp(x1,x2,t)-size/2,lerp(y1,y2,t)-size/2,size,size,color);
+    }
+  }
+
+  function drawSwordTrail(g,p){
+    const style=SWORD_STROKES[sword.step-1];
+    if(!style)return;
+    const windup=sword.step===3?.21:.14;
+    const follow=sword.step===3?.77:.74;
+    if(p<windup+.06||p>follow+.12)return;
+    // The arc follows the ACTUAL blade tip rather than the knight's center.
+    // Only the most recent part of the swing has a visible, tapered afterimage.
+    const end=Math.min(p,follow),span=sword.step===3?.24:.19;
+    const count=sword.step===3?15:12;
+    for(let i=0;i<count;i++){
+      const q=end-(i/count)*span;
+      if(q<windup+.02)break;
+      const pose=swordPoseAt(q);
+      const fade=Math.pow(1-i/count,1.35);
+      g.globalAlpha=fade*(sword.step===3?.72:.52);
+      const width= Math.max(2,Math.round((sword.step===3?6:5)*fade));
+      const tangentX=-pose.dirY,tangentY=pose.dirX;
+      // Crescent / edge glint, drawn as chunky pixels without texture filtering.
+      pix(g,pose.bladeX-width*.5,pose.bladeY-width*.5,width+1,width,
+        i<4?"#fff4d6":i<8?"#dbe9df":"#92aab1");
+      if(i%2===0)pix(g,pose.bladeX-tangentX*6,pose.bladeY-tangentY*6,3,3,
+        i<5?"#f4ddb7":"#9bbdc1");
     }
     g.globalAlpha=1;
-    // The blade itself moves through the arc in stepped-pixel increments.
-    for(let r=7;r<=reach;r+=2){
-      const bx=handX+Math.cos(angle)*r,by=handY+Math.sin(angle)*r*.8;
-      pix(g,bx-1,by-1,r>reach-6?3:2,2,r>reach-6?"#fff5d9":"#c6d7d5");
-    }
-    const hX=handX+Math.cos(angle)*6,hY=handY+Math.sin(angle)*6*.8;
-    pix(g,hX-2,hY-2,5,3,"#d6ab77");
-    pix(g,handX+Math.cos(angle)*2,handY+Math.sin(angle)*2*.8,3,3,"#56415b");
-    if(final && p>.42 && p<.78){
-      const v=(p-.42)/.36;
-      g.globalAlpha=(1-v)*.8;
-      for(let i=0;i<18;i++){
-        const a=base+(i/17-.5)*2.9;
-        const x=player.x+Math.cos(a)*(21+v*26),y=player.y-7+Math.sin(a)*(14+v*17);
-        pix(g,x,y,3,2,i%2?"#f7e7ae":"#ccdce0");
-      }
+    // A directional impact flash in the final cleave, not a full character halo.
+    if(sword.step===3&&p>.47&&p<.76){
+      const pose=swordPoseAt(p);
+      const glow=1-Math.abs(p-.6)/.2;
+      g.globalAlpha=Math.max(0,glow)*.74;
+      const tipX=pose.bladeX,tipY=pose.bladeY;
+      pix(g,tipX-4,tipY-2,9,3,"#fff5d4");
+      pix(g,tipX-1,tipY-6,3,10,"#dce9de");
       g.globalAlpha=1;
     }
+  }
+
+  function drawSword(g){
+    const p=clamp(sword.elapsed/sword.duration,0,1);
+    const pose=swordPoseAt(p);
+    drawSwordTrail(g,p);
+
+    // Articulated shoulder, elbow and gauntlet, over the armor silhouette.
+    // Both joints move with the weapon; the hand genuinely drives the hilt.
+    drawSwordLine(g,pose.shoulderX,pose.shoulderY,
+      pose.elbowX,pose.elbowY,"#372f47",6);
+    drawSwordLine(g,pose.shoulderX,pose.shoulderY,
+      pose.elbowX,pose.elbowY,"#8b9da1",4);
+    drawSwordLine(g,pose.elbowX,pose.elbowY,
+      pose.handX,pose.handY,"#40354c",5);
+    drawSwordLine(g,pose.elbowX,pose.elbowY,
+      pose.handX,pose.handY,"#b8c7c3",3);
+    pix(g,pose.elbowX-2,pose.elbowY-2,4,4,"#667987");
+
+    const hx=pose.handX,hy=pose.handY,dx=pose.dirX,dy=pose.dirY;
+    const nx=-dy,ny=dx;
+    // Readable physical sword: dark handle, pommel, gold crossguard,
+    // iron central ridge, tapered steel blade and a bright cutting edge.
+    drawSwordLine(g,hx-dx*4,hy-dy*4,hx+dx*10,hy+dy*10,"#463449",5);
+    drawSwordLine(g,hx-dx*2,hy-dy*2,hx+dx*8,hy+dy*8,"#9b7159",3);
+    pix(g,hx-dx*5-2,hy-dy*5-2,5,5,"#d6ad71");
+    const guardX=hx+dx*9,guardY=hy+dy*9;
+    drawSwordLine(g,guardX-nx*7,guardY-ny*7,
+      guardX+nx*7,guardY+ny*7,"#473750",5);
+    drawSwordLine(g,guardX-nx*6,guardY-ny*6,
+      guardX+nx*6,guardY+ny*6,"#e8c790",3);
+    const bladeStartX=hx+dx*11,bladeStartY=hy+dy*11;
+    const length=SWORD_STROKES[sword.step-1].length;
+    const tipX=pose.bladeX,tipY=pose.bladeY;
+    // Blocky metal silhouette tapers at the last six pixels.
+    drawSwordLine(g,bladeStartX,bladeStartY,
+      hx+dx*(length-6),hy+dy*(length-6),"#39465b",7);
+    drawSwordLine(g,bladeStartX,bladeStartY,
+      hx+dx*(length-5),hy+dy*(length-5),"#9bb9c0",5);
+    drawSwordLine(g,bladeStartX+nx*1.2,bladeStartY+ny*1.2,
+      hx+dx*(length-5)+nx,hy+dy*(length-5)+ny,"#edf2df",2);
+    drawSwordLine(g,hx+dx*(length-5),hy+dy*(length-5),
+      tipX,tipY,"#dce9e6",3);
+    pix(g,tipX-1,tipY-1,3,3,"#fff6df");
+    // Draw the gripping gauntlet LAST, firmly wrapping around the hilt.
+    pix(g,hx-3,hy-3,7,6,"#40334b");
+    pix(g,hx-2,hy-3,5,4,"#c6d0c8");
+    pix(g,hx,hy-1,3,2,"#718d98");
   }
 
   function drawBark(g){
@@ -1233,8 +1334,19 @@
   }
   function drawKnight(g){
     const fr=Math.floor(player.step)%2;
-    const jolt=sword.active?Math.sin(sword.elapsed/sword.duration*Math.PI)*2:0;
-    g.drawImage(knightSprites[player.face+fr],Math.round(player.x-12),Math.round(player.y-25+jolt));
+    const swinging=sword.active&&weapon==="sword";
+    const p=swinging?clamp(sword.elapsed/sword.duration,0,1):0;
+    // Anchor the attack pose to the legs while the shoulders twist and lean.
+    const pose=swinging?swordPoseAt(p):null;
+    const face=swinging?
+      (Math.abs(Math.cos(sword.facing))>Math.abs(Math.sin(sword.facing))?
+        (Math.cos(sword.facing)>0?"right":"left"):
+        (Math.sin(sword.facing)>0?"down":"up")):player.face;
+    const lunge=pose?Math.sin(p*Math.PI)*(sword.step===3?3:1.5):0;
+    const jolt=pose?-Math.sin(p*Math.PI)*1:0;
+    g.drawImage(knightSprites[face+fr],
+      Math.round(player.x-12+Math.cos(sword.facing||0)*lunge),
+      Math.round(player.y-25+jolt+Math.sin(sword.facing||0)*lunge*.7));
     if(weapon==="crossbow"){
       const a=player.angle;
       // Crossbow silhouette in the knight's hands, aligned with facing.
