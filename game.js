@@ -139,6 +139,7 @@
   const tombRect={x:32,y:35,w:354,h:234};
   let currentInput=null;
   const trees=[],sheep=[],stones=[],moths=[],particles=[],flowers=[],relics=[];
+  let blood=null;
   const crownSprites=[],sheepSprites={};
   let dogSprites={},knightSprites={};
   let bg=null, audio=null,cryptFloor=null;
@@ -677,7 +678,7 @@
         wander:rbetween(0,TAU),clock:rbetween(.5,2.2),panic:0,spot:i%4===0,
         home:false,pace:rbetween(.83,1.2),bravery:rbetween(.84,1.23),
         state:i%4===0?"walk":"graze",stateTimer:rbetween(.6,3),
-        fleeX:0,fleeY:0,motion:0});
+        fleeX:0,fleeY:0,motion:0,hp:3,maxHp:3,dead:false,flash:0,fallAngle:0});
     }
   }
   function spawnTargets(){
@@ -844,6 +845,29 @@
     startSwing(canChain?sword.step+1:1);
   }
 
+  function hurtSheep(s,damage,dx,dy){
+    if(s.dead)return;
+    s.hp=Math.max(0,s.hp-damage);
+    s.flash=.32;
+    const mag=Math.hypot(dx,dy)||1;
+    dx/=mag;dy/=mag;
+    s.panic=2.5;s.state="flee";
+    s.fleeX=dx;s.fleeY=dy;
+    s.vx+=dx*23;s.vy+=dy*23;
+    blood.hit(s,dx,dy,{room:null,amount:damage,sourceHeight:5,fatal:s.hp<=0});
+    if(s.hp<=0){
+      s.dead=true;s.motion=0;s.vx=0;s.vy=0;
+      s.fallAngle=dx<0?-1.20:1.20;
+      if(s.home){
+        s.home=false;
+        homed=Math.max(0,homed-1);
+        collectedLabel.textContent=Math.min(homed,GOAL);
+        if(win&&homed<GOAL){win=false;game.classList.remove("completed");}
+      }
+      showNotice("A SHEEP HAS FALLEN","A sheep has been lost from the flock.",2.2);
+    }
+  }
+
   function hitSwordTargets() {
     const radius=(sword.step===3?37:29)*OBJECT_SCALE;
     const cone=sword.step===3?1.65:1.29;
@@ -879,6 +903,20 @@
       if(Math.abs(diff)>cone)continue;
       hurtEnemy(e,sword.step===3?5:2,dx/Math.max(1,dist),dy/Math.max(1,dist));
       found=true;
+    }
+    if(underground===null){
+      for(const s of sheep){
+        if(s.dead)continue;
+        const dx=s.x-player.x,dy=s.y-player.y;
+        const dist=Math.hypot(dx,dy*1.12);
+        if(dist>radius+5)continue;
+        const angle=Math.atan2(dy,dx);
+        const diff=Math.atan2(Math.sin(angle-sword.facing),Math.cos(angle-sword.facing));
+        if(Math.abs(diff)>cone)continue;
+        hurtSheep(s,sword.step===3?5:2,
+          Math.cos(sword.facing),Math.sin(sword.facing));
+        found=true;
+      }
     }
     if(found){
       sound("impact");
@@ -960,6 +998,8 @@
   function updateSheep(dt) {
     for(let i=0;i<sheep.length;i++){
       const s=sheep[i];
+      if(s.dead){s.motion=0;continue;}
+      s.flash=Math.max(0,s.flash-dt);
       s.phase+=dt;
       if(s.home){
         s.state="graze";s.motion=0;
@@ -997,6 +1037,7 @@
       for(let j=0;j<sheep.length;j++){
         if(i===j)continue;
         const o=sheep[j];
+        if(o.dead)continue;
         const ox=o.x-s.x,oy=o.y-s.y,d2=ox*ox+oy*oy;
         if(d2<.01)continue;
         if(d2<14*14){
@@ -1397,6 +1438,22 @@
     }
   }
   function drawSheep(g,s){
+    if(s.dead){
+      // Fallen sheep lie on the ground where the hit landed.
+      g.save();
+      g.translate(Math.round(s.x),Math.round(s.y)-3);
+      g.rotate(s.fallAngle);
+      g.globalAlpha=.88;
+      g.drawImage(sheepSprites[s.dir+"0"+(s.spot?1:0)],-9,-10);
+      g.restore();
+      return;
+    }
+    if(s.flash>0){
+      g.fillStyle="#8c3548";
+      g.globalAlpha=Math.min(.6,s.flash*2);
+      g.fillRect(s.x-6,s.y-8,12,6);
+      g.globalAlpha=1;
+    }
     const running=s.motion>30;
     const walking=s.motion>4;
     const fr=walking?Math.floor(s.phase*(running?15:7))%2:0;
@@ -1529,6 +1586,8 @@
     damageFeedback.style.opacity="1";
     health=Math.max(0,health-amount);healthRefresh();
     addParticles(player.x,player.y-10,"#df9c9c",10);
+    blood.hit(player,player.x-sourceX,player.y-sourceY,
+      {room:underground,amount,fatal:health<=0,sourceHeight:9});
     if(health>0){
       showNotice("OUCH!","Watch enemy attacks. Keep moving and time your strikes.",2);
       sound("impact");
@@ -1547,6 +1606,9 @@
     e.hp=Math.max(0,e.hp-damage);e.flash=.23;e.stun=e.type==="boss"?.15:.29;
     e.vx+=dx*(e.type==="boss"?5:13);e.vy+=dy*(e.type==="boss"?5:13);
     addParticles(e.x,e.y-8,e.type==="ghost"||e.type==="wisp"?"#a4e4d3":e.type==="slime"?"#b9da86":e.type==="golem"?"#c2b9aa":e.type==="wolf"?"#a6a29c":"#e6b994",7);
+    if(e.type==="bandit"||e.type==="wolf"||e.type==="boss")
+      blood.hit(e,dx,dy,{room:underground,amount:damage,
+        fatal:e.hp<=0,sourceHeight:e.type==="boss"?17:7});
     sound("impact");
     if(e.hp<=0){
       e.dead=true;
@@ -1594,6 +1656,16 @@
           if(Math.hypot(e.x-b.x,(e.y-4)-b.y)<e.r*OBJECT_SCALE+5){
             const len=Math.hypot(b.vx,b.vy)||1;
             hurtEnemy(e,b.damage,b.vx/len,b.vy/len);
+            hit=true;break;
+          }
+        }
+      }
+      if(!hit && underground===null){
+        for(const s of sheep){
+          if(s.dead)continue;
+          if(Math.hypot(s.x-b.x,(s.y-5)-b.y)<7){
+            const len=Math.hypot(b.vx,b.vy)||1;
+            hurtSheep(s,b.damage,b.vx/len,b.vy/len);
             hit=true;break;
           }
         }
@@ -1951,6 +2023,7 @@
     ctx.fillStyle="#252737";ctx.fillRect(0,0,screenW,screenH);
     ctx.save();ctx.translate(-cx,-cy);
     drawCryptBackdrop(ctx);
+    blood.drawGround(ctx,underground,cx,cy,screenW,screenH);
     if(mist)mist.draw(ctx,false);
     const ordered=[];
     for(const e of enemies)if(!e.dead&&inCurrentRoom(e))ordered.push({y:e.y,type:"enemy",o:e});
@@ -1963,6 +2036,7 @@
     }
     drawBolts(ctx);
     if(mist)mist.draw(ctx,true);
+    blood.drawAir(ctx,underground,cx,cy,screenW,screenH);
     drawParticles(ctx);
     ctx.restore();
   }
@@ -1995,6 +2069,7 @@
       ctx.scale(OBJECT_SCALE,OBJECT_SCALE);ctx.translate(-Math.round(rock.x),-Math.round(rock.y));
       drawStone(ctx,rock.x,rock.y,Math.floor(rock.size),rock.kind);ctx.restore();
     }
+    blood.drawGround(ctx,null,cx,cy,screenW,screenH);
     // Ground-level drifting particles sit around the world sprites.
     if(mist)mist.draw(ctx,false);
     // Sort trunks, sheep, dog and ancient standing stones by foot position.
@@ -2030,6 +2105,7 @@
     }
     drawMoths(ctx);drawBark(ctx);drawBolts(ctx);
     if(mist)mist.draw(ctx,true);
+    blood.drawAir(ctx,null,cx,cy,screenW,screenH);
     drawParticles(ctx);
     ctx.restore();
   }
@@ -2039,7 +2115,7 @@
     const dt=Math.min(.05,(timestamp-last)/1000);last=timestamp;time+=dt;
     updatePlayer(dt);updateSword(dt);
     if(underground===null)updateSheep(dt);
-    updateEnemies(dt);updateParticles(dt);updateActionLabel();
+    updateEnemies(dt);updateParticles(dt);blood.update(dt);updateActionLabel();
     if(damageFlash>0){
       damageFlash=Math.max(0,damageFlash-dt*1.65);
       // Very visible on initial contact, then a smooth fade over ~0.6 sec.
@@ -2107,6 +2183,7 @@
     buildTreeSprites();buildSheepSprites();buildDogSprites();buildKnightSprites();
     generateTrees();makeGround();spawnLife();spawnTargets();spawnAdventure();
     healthRefresh();weaponButton.dataset.weapon="sword";
+    blood=new window.AboveBlood();
     mist=new window.AboveMist(document,biomeAt);
     mist.reset(screenW,screenH,camX,camY,underground);
     setupInput();
