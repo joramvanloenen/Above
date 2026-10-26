@@ -923,6 +923,7 @@
       const speed=leader.speed*strength*slow;
       leader.x+=dx*speed*dt;leader.y+=dy*speed*dt;
       leader.angle=Math.atan2(dy,dx);
+      if(leader===player&&sword.active)sword.facing=leader.angle;
       if(Math.abs(dx)>Math.abs(dy)*.85)leader.face=dx>0?"right":"left";
       else leader.face=dy>0?"down":"up";
       leader.step+=dt*(leader===dog?16:11)*strength*slow;
@@ -1162,52 +1163,89 @@
     }
   }
 
-  // Animated sword is rigged to the knight's off-center shoulder / hand, not
-  // the sprite origin. All dimensions are in unscaled sprite-space; the
-  // existing OBJECT_SCALE render wrapper keeps world and collision sizes intact.
+  // Grip anchors are measured in the knight's 24x29 pixel sprite.
+  // The handedness flips with the displayed direction: when walking up
+  // the right hand is on the left side of the screen, and vice versa.
+  // The walking frame's one-pixel arm offset is also respected.
+  const KNIGHT_HAND={
+    right:{hand:[20,17],shoulder:[18,11]},
+    left: {hand:[5,17], shoulder:[7,11]},
+    down: {hand:[20,17],shoulder:[18,11]},
+    up:   {hand:[5,17], shoulder:[7,11]}
+  };
   const SWORD_STROKES=[
-    {start:-1.82,end:1.12,length:35},  // diagonal slash, high -> low
-    {start:1.72,end:-1.18,length:36},  // reversing backhand
-    {start:-2.50,end:.17,length:43}    // raised overhead finishing cleave
+    {start:-1.82,end:1.12,length:35},
+    {start:1.72,end:-1.18,length:36},
+    {start:-2.50,end:.17,length:43}
   ];
+  const SWORD_VISUAL_SCALE=.55;
   const swingEase=x=>1-Math.pow(1-clamp(x,0,1),2.6);
 
-  function swordPoseAt(p){
-    const step=sword.step,style=SWORD_STROKES[step-1]||SWORD_STROKES[0];
-    const facing=sword.facing;
-    const u=clamp(p,0,1);
-    const windup=step===3?.21:.14;
-    const follow=step===3?.77:.74;
-    let angle,attack=0,extension=0;
-    if(u<windup){
-      const t=swingEase(u/windup);
-      angle=style.start-.22*(1-t);
-      extension=-3+3*t;
-    }else if(u<follow){
-      attack=swingEase((u-windup)/(follow-windup));
-      angle=lerp(style.start,style.end,attack);
-      extension=Math.sin(attack*Math.PI)*(step===3?10:4);
+  function swordFaceFromAngle(angle){
+    return Math.abs(Math.cos(angle))>Math.abs(Math.sin(angle))?
+      (Math.cos(angle)>0?"right":"left"):
+      (Math.sin(angle)>0?"down":"up");
+  }
+
+  // One placement for sprite, grip, arm and weapon. This is shared by
+  // the attack and idle render paths, so no center-of-character transforms
+  // or separately approximated offsets can make the weapon float.
+  function knightPlacement(){
+    const fr=Math.floor(player.step)%2;
+    const face=player.face;
+    const swinging=sword.active&&weapon==="sword";
+    const p=swinging?clamp(sword.elapsed/sword.duration,0,1):0;
+    const lunge=swinging?Math.sin(p*Math.PI)*(sword.step===3?3:1.5):0;
+    const jolt=swinging?-Math.sin(p*Math.PI):0;
+    const ax=swinging?sword.facing:player.angle;
+    const spriteX=Math.round(player.x-12+Math.cos(ax)*lunge);
+    const spriteY=Math.round(player.y-25+jolt+Math.sin(ax)*lunge*.7);
+    const hand=KNIGHT_HAND[face]||KNIGHT_HAND.down;
+    const walkOffset=fr?0:1; // matches b in buildKnightSprite()
+    return {fr,face,spriteX,spriteY,handX:spriteX+hand.hand[0],
+      handY:spriteY+hand.hand[1]+walkOffset,
+      shoulderX:spriteX+hand.shoulder[0],
+      shoulderY:spriteY+hand.shoulder[1]+walkOffset};
+  }
+
+  // Swing rotation happens AROUND the hand. The hand stays attached to
+  // the actual rendered arm for every walking direction and walking frame.
+  function swordPoseAt(p,placement=knightPlacement()){
+    const active=sword.active&&weapon==="sword";
+    const step=active?sword.step:1;
+    const style=SWORD_STROKES[step-1]||SWORD_STROKES[0];
+    const face=placement.face;
+    let angle,attack=0;
+    if(active){
+      const u=clamp(p,0,1);
+      const windup=step===3?.21:.14,follow=step===3?.77:.74;
+      if(u<windup){
+        const t=swingEase(u/windup);
+        angle=style.start-.22*(1-t);
+      }else if(u<follow){
+        attack=swingEase((u-windup)/(follow-windup));
+        angle=lerp(style.start,style.end,attack);
+      }else{
+        const recovery=(u-follow)/(1-follow);
+        angle=style.end+(step===3?.12:-.10)*recovery;
+        attack=1;
+      }
+      angle+=sword.facing;
     }else{
-      const recovery=(u-follow)/(1-follow);
-      angle=style.end+(step===3?.12:-.10)*recovery;
-      extension=-1.5*recovery;
-      attack=1;
+      // Natural resting blade direction for all four views.
+      angle=face==="right"?.58:face==="left"?Math.PI-.58:
+        face==="down"?1.23:-1.91;
     }
-    const fx=Math.cos(facing),fy=Math.sin(facing);
-    const tx=-fy,ty=fx;
-    // One shoulder lies outside the armor; a small torso shift sells rotation.
-    const lean=Math.sin(attack*Math.PI)*(step===3?3.6:2.2);
-    const shoulderX=player.x+tx*7+fx*(1+lean);
-    const shoulderY=player.y-15+ty*4+fy*(1+lean)*.78;
-    const dirX=Math.cos(facing+angle),dirY=Math.sin(facing+angle)*.78;
-    const handX=shoulderX+dirX*7+fx*extension;
-    const handY=shoulderY+dirY*7+fy*extension*.78;
-    const elbowX=lerp(shoulderX,handX,.53)+tx*1.8;
-    const elbowY=lerp(shoulderY,handY,.53)+ty*1.3;
-    const bladeX=handX+dirX*style.length;
-    const bladeY=handY+dirY*style.length;
-    return {step,angle,attack,windup,follow,shoulderX,shoulderY,
-      elbowX,elbowY,handX,handY,dirX,dirY,bladeX,bladeY};
+    const handX=placement.handX,handY=placement.handY;
+    const dirX=Math.cos(angle),dirY=Math.sin(angle)*.80;
+    const tipLength=style.length*SWORD_VISUAL_SCALE;
+    const bladeX=handX+dirX*tipLength;
+    const bladeY=handY+dirY*tipLength;
+    const elbowX=(placement.shoulderX+handX)*.5+(face==="left"?-1:1);
+    const elbowY=(placement.shoulderY+handY)*.5+1;
+    return {step,angle,attack,shoulderX:placement.shoulderX,
+      shoulderY:placement.shoulderY,elbowX,elbowY,handX,handY,
+      dirX,dirY,bladeX,bladeY};
   }
 
   function drawSwordLine(g,x1,y1,x2,y2,color,size=2){
@@ -1219,7 +1257,7 @@
     }
   }
 
-  function drawSwordTrail(g,p){
+  function drawSwordTrail(g,p,placement){
     const style=SWORD_STROKES[sword.step-1];
     if(!style)return;
     const windup=sword.step===3?.21:.14;
@@ -1232,84 +1270,73 @@
     for(let i=0;i<count;i++){
       const q=end-(i/count)*span;
       if(q<windup+.02)break;
-      const pose=swordPoseAt(q);
+      const pose=swordPoseAt(q,placement);
       const fade=Math.pow(1-i/count,1.35);
       g.globalAlpha=fade*(sword.step===3?.72:.52);
-      const width= Math.max(2,Math.round((sword.step===3?6:5)*fade));
+      const width=Math.max(1,Math.round((sword.step===3?3.6:3)*fade));
       const tangentX=-pose.dirY,tangentY=pose.dirX;
       // Crescent / edge glint, drawn as chunky pixels without texture filtering.
       pix(g,pose.bladeX-width*.5,pose.bladeY-width*.5,width+1,width,
         i<4?"#fff4d6":i<8?"#dbe9df":"#92aab1");
-      if(i%2===0)pix(g,pose.bladeX-tangentX*6,pose.bladeY-tangentY*6,3,3,
+      if(i%2===0)pix(g,pose.bladeX-tangentX*3,pose.bladeY-tangentY*3,2,2,
         i<5?"#f4ddb7":"#9bbdc1");
     }
     g.globalAlpha=1;
     // A directional impact flash in the final cleave, not a full character halo.
     if(sword.step===3&&p>.47&&p<.76){
-      const pose=swordPoseAt(p);
+      const pose=swordPoseAt(p,placement);
       const glow=1-Math.abs(p-.6)/.2;
       g.globalAlpha=Math.max(0,glow)*.74;
       const tipX=pose.bladeX,tipY=pose.bladeY;
-      pix(g,tipX-4,tipY-2,9,3,"#fff5d4");
-      pix(g,tipX-1,tipY-6,3,10,"#dce9de");
+      pix(g,tipX-2,tipY-1,5,2,"#fff5d4");
+      pix(g,tipX-1,tipY-3,2,6,"#dce9de");
       g.globalAlpha=1;
     }
   }
 
-  function drawSword(g){
-    // The rig was drawn at oversized weapon-concept proportions.
-    // Scale the WHOLE shoulder/hand/blade/trail around the knight's chest so
-    // the physical grip stays attached and all three strikes stay consistent.
+  function drawSword(g,placement=knightPlacement()){
+    const active=sword.active&&weapon==="sword";
+    const p=active?clamp(sword.elapsed/sword.duration,0,1):0;
+    const pose=swordPoseAt(p,placement);
+    if(active)drawSwordTrail(g,p,placement);
+
+    // Short articulated forearm stays between the sprite's real shoulder
+    // and real hand, instead of swinging around the body's center.
+    drawSwordLine(g,pose.shoulderX,pose.shoulderY,
+      pose.elbowX,pose.elbowY,"#4a4157",3);
+    drawSwordLine(g,pose.shoulderX,pose.shoulderY,
+      pose.elbowX,pose.elbowY,"#91a8ab",2);
+    drawSwordLine(g,pose.elbowX,pose.elbowY,
+      pose.handX,pose.handY,"#3e344a",3);
+    drawSwordLine(g,pose.elbowX,pose.elbowY,
+      pose.handX,pose.handY,"#abbfc0",2);
+
+    // IMPORTANT: the local origin (0,0) is the wrist's grip.
+    // Translation to a different hand anchor happens BEFORE the rotation.
+    // The grip remains fixed as the sword rotates and the player walks.
     g.save();
-    g.translate(player.x,player.y-14);
-    g.scale(.55,.55);
-    g.translate(-player.x,-player.y+14);
-    const p=clamp(sword.elapsed/sword.duration,0,1);
-    const pose=swordPoseAt(p);
-    drawSwordTrail(g,p);
-
-    // Articulated shoulder, elbow and gauntlet, over the armor silhouette.
-    // Both joints move with the weapon; the hand genuinely drives the hilt.
-    drawSwordLine(g,pose.shoulderX,pose.shoulderY,
-      pose.elbowX,pose.elbowY,"#372f47",6);
-    drawSwordLine(g,pose.shoulderX,pose.shoulderY,
-      pose.elbowX,pose.elbowY,"#8b9da1",4);
-    drawSwordLine(g,pose.elbowX,pose.elbowY,
-      pose.handX,pose.handY,"#40354c",5);
-    drawSwordLine(g,pose.elbowX,pose.elbowY,
-      pose.handX,pose.handY,"#b8c7c3",3);
-    pix(g,pose.elbowX-2,pose.elbowY-2,4,4,"#667987");
-
-    const hx=pose.handX,hy=pose.handY,dx=pose.dirX,dy=pose.dirY;
-    const nx=-dy,ny=dx;
-    // Readable physical sword: dark handle, pommel, gold crossguard,
-    // iron central ridge, tapered steel blade and a bright cutting edge.
-    drawSwordLine(g,hx-dx*4,hy-dy*4,hx+dx*10,hy+dy*10,"#463449",5);
-    drawSwordLine(g,hx-dx*2,hy-dy*2,hx+dx*8,hy+dy*8,"#9b7159",3);
-    pix(g,hx-dx*5-2,hy-dy*5-2,5,5,"#d6ad71");
-    const guardX=hx+dx*9,guardY=hy+dy*9;
-    drawSwordLine(g,guardX-nx*7,guardY-ny*7,
-      guardX+nx*7,guardY+ny*7,"#473750",5);
-    drawSwordLine(g,guardX-nx*6,guardY-ny*6,
-      guardX+nx*6,guardY+ny*6,"#e8c790",3);
-    const bladeStartX=hx+dx*11,bladeStartY=hy+dy*11;
-    const length=SWORD_STROKES[sword.step-1].length;
-    const tipX=pose.bladeX,tipY=pose.bladeY;
-    // Blocky metal silhouette tapers at the last six pixels.
-    drawSwordLine(g,bladeStartX,bladeStartY,
-      hx+dx*(length-6),hy+dy*(length-6),"#39465b",7);
-    drawSwordLine(g,bladeStartX,bladeStartY,
-      hx+dx*(length-5),hy+dy*(length-5),"#9bb9c0",5);
-    drawSwordLine(g,bladeStartX+nx*1.2,bladeStartY+ny*1.2,
-      hx+dx*(length-5)+nx,hy+dy*(length-5)+ny,"#edf2df",2);
-    drawSwordLine(g,hx+dx*(length-5),hy+dy*(length-5),
-      tipX,tipY,"#dce9e6",3);
-    pix(g,tipX-1,tipY-1,3,3,"#fff6df");
-    // Draw the gripping gauntlet LAST, firmly wrapping around the hilt.
-    pix(g,hx-3,hy-3,7,6,"#40334b");
-    pix(g,hx-2,hy-3,5,4,"#c6d0c8");
-    pix(g,hx,hy-1,3,2,"#718d98");
+    g.translate(pose.handX,pose.handY);
+    g.scale(SWORD_VISUAL_SCALE,SWORD_VISUAL_SCALE*.80);
+    g.rotate(pose.angle);
+    // Pommel + hilt (the hand grips near local x=0).
+    drawSwordLine(g,-4,0,10,0,"#463449",5);
+    drawSwordLine(g,-2,0,8,0,"#9b7159",3);
+    pix(g,-7,-2,5,5,"#d6ad71");
+    // Gold crossguard.
+    drawSwordLine(g,9,-7,9,7,"#473750",5);
+    drawSwordLine(g,9,-6,9,6,"#e8c790",3);
+    const bladeLength=SWORD_STROKES[pose.step-1].length;
+    drawSwordLine(g,11,0,bladeLength-6,0,"#39465b",7);
+    drawSwordLine(g,11,0,bladeLength-5,0,"#9bb9c0",5);
+    drawSwordLine(g,11,1.2,bladeLength-5,1,"#edf2df",2);
+    drawSwordLine(g,bladeLength-5,0,bladeLength,0,"#dce9e6",3);
+    pix(g,bladeLength-1,-1,3,3,"#fff6df");
     g.restore();
+
+    // Gauntlet over the handle makes the grip unambiguous at all angles.
+    pix(g,pose.handX-2,pose.handY-2,5,5,"#40334b");
+    pix(g,pose.handX-1,pose.handY-2,3,3,"#c6d0c8");
+    pix(g,pose.handX,pose.handY,2,1,"#718d98");
   }
 
   function drawBark(g){
@@ -1342,28 +1369,14 @@
     g.globalAlpha=1;
   }
   function drawKnight(g){
-    const fr=Math.floor(player.step)%2;
-    const swinging=sword.active&&weapon==="sword";
-    const p=swinging?clamp(sword.elapsed/sword.duration,0,1):0;
-    // Anchor the attack pose to the legs while the shoulders twist and lean.
-    const pose=swinging?swordPoseAt(p):null;
-    const face=swinging?
-      (Math.abs(Math.cos(sword.facing))>Math.abs(Math.sin(sword.facing))?
-        (Math.cos(sword.facing)>0?"right":"left"):
-        (Math.sin(sword.facing)>0?"down":"up")):player.face;
-    const lunge=pose?Math.sin(p*Math.PI)*(sword.step===3?3:1.5):0;
-    const jolt=pose?-Math.sin(p*Math.PI)*1:0;
-    g.drawImage(knightSprites[face+fr],
-      Math.round(player.x-12+Math.cos(sword.facing||0)*lunge),
-      Math.round(player.y-25+jolt+Math.sin(sword.facing||0)*lunge*.7));
-    if(!swinging && weapon==="sword"){
-      const sheathX=face==="left"?player.x+7:player.x-9;
-      pix(g,sheathX,player.y-9,3,9,"#413549");
-      pix(g,sheathX,player.y-10,3,3,"#d4aa7a");
-    }
+    const placement=knightPlacement();
+    // When moving north the weapon belongs behind the torso; the hand still
+    // shares the same sprite-space attachment point, not a guessed pivot.
+    if(weapon==="sword"&&placement.face==="up")drawSword(g,placement);
+    g.drawImage(knightSprites[placement.face+placement.fr],
+      placement.spriteX,placement.spriteY);
     if(weapon==="crossbow"){
       const a=player.angle;
-      // Crossbow silhouette in the knight's hands, aligned with facing.
       g.save();g.translate(Math.round(player.x),Math.round(player.y-14));
       g.rotate(a);pix(g,3,-2,14,4,"#694f4e");
       pix(g,15,-2,2,4,"#e6dfcd");
@@ -1372,8 +1385,9 @@
       pix(g,5,-1,14,2,"#e5d2a9");
       g.restore();
     }
-    if(sword.active)drawSword(g);
+    if(weapon==="sword"&&placement.face!=="up")drawSword(g,placement);
   }
+
   function drawDog(g){
     const fr=Math.floor(dog.step)%2;
     g.drawImage(dogSprites[dog.face+fr],Math.round(dog.x-10),Math.round(dog.y-16));
