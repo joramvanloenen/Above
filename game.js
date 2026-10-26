@@ -1587,7 +1587,7 @@
     health=Math.max(0,health-amount);healthRefresh();
     addParticles(player.x,player.y-10,"#df9c9c",10);
     blood.hit(player,player.x-sourceX,player.y-sourceY,
-      {room:underground,amount,fatal:health<=0,sourceHeight:9});
+      {room:underground,amount,fatal:health<=0,fixedSource:health<=0,sourceHeight:9});
     if(health>0){
       showNotice("OUCH!","Watch enemy attacks. Keep moving and time your strikes.",2);
       sound("impact");
