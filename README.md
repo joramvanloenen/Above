@@ -60,6 +60,10 @@ Above now uses **soft drifting sprite particles**, not fluid dynamics, volumetri
 - Hits trigger a high-contrast **full-screen red flash** with a fading vignette and canvas fallback.
 - Characters, enemies, trees, and foreground props render at **half their original size**, keeping the world map and camera unchanged.
 
+## Knight sword animation
+
+The three-hit sword combo now animates as a physical weapon rather than a line spinning around the character. A **shoulder → elbow → hand → sword** pose is calculated through each attack; the blade is attached to a visible gauntlet, hilt, crossguard and tapered steel edge. The first hit slashes diagonally, the second reverses direction, and the third is an extended overhead cleave with a tip-following afterimage and impact glint. Wind-up, strike, body lean and recovery are synchronized with damage timing. The old permanently drawn sheath is hidden whenever the weapon is being swung. Rapid triple taps and existing fast input buffering remain intact, and all sword art uses the game's nearest-neighbor, unfiltered pixel style.
+
 ## Unfiltered pixels and smoother camera
 
 - All game graphics, including mist sprites, now use **nearest-neighbor sampling** with no bilinear canvas/image filtering. The display canvas is explicitly marked `image-rendering: pixelated`.
