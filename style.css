@@ -46,8 +46,7 @@
   will-change:opacity;
 }
 
-/* WebGL post-process composites directly into the pixel-art canvas.
-   No independently composited fog layer or CSS opacity is used. */
+/* Particle mist is drawn inside the world canvas; HUD stays above it. */
 #world{z-index:0}
 #vignette{z-index:2}
 .topbar,.health,.boss-bar,.notice,.bottom-hint{z-index:4}
