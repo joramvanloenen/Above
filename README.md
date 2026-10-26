@@ -60,6 +60,15 @@ Above now uses **soft drifting sprite particles**, not fluid dynamics, volumetri
 - Hits trigger a high-contrast **full-screen red flash** with a fading vignette and canvas fallback.
 - Characters, enemies, trees, and foreground props render at **half their original size**, keeping the world map and camera unchanged.
 
+## Combat blood and sheep damage
+
+- Sheep can be struck by the sword or crossbow. They have three health points; injured sheep panic and flee, while defeated sheep remain lying on the ground and no longer graze, flee or contribute to the rescued flock.
+- Organic enemies (bandits, wolves and the Mire King) and the knight produce stylized **directional blood spray when struck**. Non-organic enemies retain their original hit particles.
+- Red droplets simulate **initial velocity, gravity and ballistic arcs** in world space; all splatter direction derives from the incoming sword or projectile vector. Sprays leave thin streaks and individual blood marks when landing.
+- Short-lived **pulsing wound emitters** launch finer streams that arc and deposit more droplets. Repeated impacts gradually grow irregular floor pools; stains and pools persist on their respective surface or tomb floor, without obscuring interface controls.
+- Particle, pool and decal counts are bounded to limit work on mobile devices. Graphics remain unfiltered Canvas 2D pixel art.
+- Blood caused by the knight's defeat stays where the hit occurred instead of moving with the respawned knight. Implementation: `blood.js`, integrated with `game.js`.
+
 ## Knight sword grip and animation
 
 The knight **holds the sword in the actual visible hand**, even while idle and walking. The sword's hilt pivot is placed at a sprite-space hand anchor, with **separate left/right/up/down placements** and the one-pixel position difference between the two walking animation frames. The sword rotates **about the grip**, not the knight's center; its blade, crossguard and tip trail all share that transform. Up-facing swings render behind the torso for natural occlusion, while other facing directions render in front. Changing travel direction during a swing updates both the character's visible hand and the attack direction. The sword remains proportionally small at 55% of its original rig size.
