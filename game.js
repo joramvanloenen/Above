@@ -892,7 +892,9 @@
       return;
     }
     sword.elapsed+=dt;
-    if(!sword.hit && sword.elapsed>=sword.duration*.27){
+    // The finisher connects later in its overhead downstroke; the first two
+    // quick slashes still land almost immediately after a tap.
+    if(!sword.hit && sword.elapsed>=sword.duration*(sword.step===3?.43:.27)){
       sword.hit=true;hitSwordTargets();
       if(sword.step===3)addParticles(player.x+Math.cos(sword.facing)*25,
         player.y+Math.sin(sword.facing)*20-8,"#e8dbc6",10);
