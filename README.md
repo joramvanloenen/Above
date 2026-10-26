@@ -60,9 +60,16 @@ Above now uses **soft drifting sprite particles**, not fluid dynamics, volumetri
 - Hits trigger a high-contrast **full-screen red flash** with a fading vignette and canvas fallback.
 - Characters, enemies, trees, and foreground props render at **half their original size**, keeping the world map and camera unchanged.
 
+## Unfiltered pixels and smoother camera
+
+- All game graphics, including mist sprites, now use **nearest-neighbor sampling** with no bilinear canvas/image filtering. The display canvas is explicitly marked `image-rendering: pixelated`.
+- The backing canvas renders at **3× logical world resolution** (roughly physical CSS-pixel resolution). The camera can shift in increments of **one actual screen pixel** instead of jumping an entire 3-pixel logical world tile; no blur or texture interpolation is introduced.
+- The camera follows with a **critically damped spring**, smooth directional look-ahead and frame-rate-independent timing. It eases naturally as the player starts, stops or changes direction.
+- Camera position and spring momentum reset on crypt transitions, respawns and viewport resizes, avoiding long pans after teleports. Sprite positions, world dimensions, combat and touch controls are unchanged.
+
 ## Art direction
 
-A muted yellow-green meadow with tiny patches of wildflowers and grass; sparser clusters of blue-green foliage with jagged plum shadows, five distinct tree families (rounded, conifer, wide-spreading, coppice and willow), varied sizes and warm-violet twilight groves; ivory sheep, warm lavender ruins, and soft displaced tree shadows. Sprites have visible trunks, layered crowns and flattened elliptical ground footprints, implying a camera tilted slightly lower than perfectly overhead. Rendered with a low-resolution canvas and integer pixel snapping for sharp pixels on a mobile phone.
+A muted yellow-green meadow with tiny patches of wildflowers and grass; sparser clusters of blue-green foliage with jagged plum shadows, five distinct tree families (rounded, conifer, wide-spreading, coppice and willow), varied sizes and warm-violet twilight groves; ivory sheep, warm lavender ruins, and soft displaced tree shadows. Sprites have visible trunks, layered crowns and flattened elliptical ground footprints, implying a camera tilted slightly lower than perfectly overhead. Rendered with a 3×-resolution backing canvas, strict nearest-neighbor sampling and one-screen-pixel camera steps for sharp sprites and smooth scrolling on mobile.
 
 ## Architecture
 
