@@ -660,9 +660,8 @@
         pix(g,6,6+b,2,5,steel);
       }
     }
-    // Sheathed short sword visible on the hip at rest.
-    pix(g,direction==="left"?19:3,17+b,2,8,dark);
-    pix(g,direction==="left"?19:3,17+b,2,5,gold);
+    // The sheathed sword is drawn at runtime only while NOT attacking.
+    // Baking it into every walking frame made the knight wield two swords.
     return c;
   }
   function buildKnightSprites(){
@@ -1347,6 +1346,11 @@
     g.drawImage(knightSprites[face+fr],
       Math.round(player.x-12+Math.cos(sword.facing||0)*lunge),
       Math.round(player.y-25+jolt+Math.sin(sword.facing||0)*lunge*.7));
+    if(!swinging && weapon==="sword"){
+      const sheathX=face==="left"?player.x+7:player.x-9;
+      pix(g,sheathX,player.y-9,3,9,"#413549");
+      pix(g,sheathX,player.y-10,3,3,"#d4aa7a");
+    }
     if(weapon==="crossbow"){
       const a=player.angle;
       // Crossbow silhouette in the knight's hands, aligned with facing.
