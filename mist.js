@@ -161,7 +161,8 @@
     draw(g,front=false){
       if(!this.particles.length)return;
       g.save();
-      g.imageSmoothingEnabled=true;
+      // Match the unfiltered pixel-art world; never bilinearly scale fog sprites.
+      g.imageSmoothingEnabled=false;
       for(const p of this.particles){
         if((p.layer>.43)!==front)continue;
         const kind=this.room!==null?"crypt":this.biomeAt(p.x,p.y);
