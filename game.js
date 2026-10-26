@@ -142,9 +142,9 @@
   let dogSprites={},knightSprites={};
   let bg=null, audio=null,cryptFloor=null;
   const cryptProps=[];
-  // Stable scene object: no allocations in the per-frame fluid update.
-  const fogScene={player,dog,sheep,enemies,boss,trees,tombs,obstacles,relics};
-  let groundFog=null;
+  // A few drifting soft sprites, without the previous fluid/WebGL system.
+  const mistScene={player,dog,sheep,enemies,boss};
+  let mist=null;
 
   function resize() {
     screenW = Math.max(105,Math.ceil(innerWidth / SCALE));
@@ -1768,7 +1768,7 @@
     ctx.fillStyle="#252737";ctx.fillRect(0,0,screenW,screenH);
     ctx.save();ctx.translate(-cx,-cy);
     drawCryptBackdrop(ctx);
-    if(groundFog)groundFog.draw(ctx,false);
+    if(mist)mist.draw(ctx,false);
     const ordered=[];
     for(const e of enemies)if(!e.dead&&inCurrentRoom(e))ordered.push({y:e.y,type:"enemy",o:e});
     ordered.push({y:player.y,type:"knight",o:player},{y:dog.y,type:"dog",o:dog});
@@ -1779,7 +1779,7 @@
       else drawScaledObject(ctx,dog.x,dog.y,drawDog,dog);
     }
     drawBolts(ctx);
-    if(groundFog)groundFog.draw(ctx,true);
+    if(mist)mist.draw(ctx,true);
     drawParticles(ctx);
     ctx.restore();
   }
@@ -1809,8 +1809,8 @@
       ctx.scale(OBJECT_SCALE,OBJECT_SCALE);ctx.translate(-Math.round(rock.x),-Math.round(rock.y));
       drawStone(ctx,rock.x,rock.y,Math.floor(rock.size),rock.kind);ctx.restore();
     }
-    // Diffuse low-altitude fog under characters; depth wisps render above them.
-    if(groundFog)groundFog.draw(ctx,false);
+    // Ground-level drifting particles sit around the world sprites.
+    if(mist)mist.draw(ctx,false);
     // Sort trunks, sheep, dog and ancient standing stones by foot position.
     const actors=[];
     for(const t of trees){
@@ -1843,7 +1843,7 @@
       drawScaledObject(ctx,a.object.x,a.object.y,draw,a.object);
     }
     drawMoths(ctx);drawBark(ctx);drawBolts(ctx);
-    if(groundFog)groundFog.draw(ctx,true);
+    if(mist)mist.draw(ctx,true);
     drawParticles(ctx);
     ctx.restore();
   }
@@ -1869,11 +1869,8 @@
     const width=underground===null?W:420,height=underground===null?H:300;
     camX=clamp(lerp(camX,focus.x-screenW/2,ease),0,Math.max(0,width-screenW));
     camY=clamp(lerp(camY,focus.y-screenH/2,ease),0,Math.max(0,height-screenH));
-    groundFog.update(dt,camX,camY,underground,fogScene,screenW,screenH);
+    mist.update(dt,camX,camY,underground,screenW,screenH,mistScene);
     drawWorld();
-    // One opaque, depth-aware compositing pass: scene colour is attenuated
-    // and fog lighting is integrated. DOM HUD remains outside the canvas.
-    groundFog.composite(ctx,canvas,fogScene);
     if(damageFlash>0){
       // Canvas-level safety net: the whole world flashes, even if the HUD
       // overlay is obscured by a host browser or compositing issue.
@@ -1928,8 +1925,8 @@
     buildTreeSprites();buildSheepSprites();buildDogSprites();buildKnightSprites();
     generateTrees();makeGround();spawnLife();spawnTargets();spawnAdventure();
     healthRefresh();weaponButton.dataset.weapon="sword";
-    groundFog=new window.AboveGroundFog(document,biomeAt);
-    groundFog.configure(screenW,screenH,camX,camY,underground);
+    mist=new window.AboveMist(document,biomeAt);
+    mist.reset(screenW,screenH,camX,camY,underground);
     setupInput();
     window.addEventListener("resize",resize);
     window.addEventListener("orientationchange",resize);
